@@ -40,7 +40,19 @@ model Quote {
   priceEstimated      Float       @map("price_estimated")
   minimumPrice        Float       @map("minimum_price")
   requirements        String[]    // Array of requirements
-  status              QuoteStatus @default(QUOTED)
+  status              QuoteStatus @default(DRAFT)
+
+  // AI Messages tracking for requirements analysis
+  aiMessagesUsedForRequirements Int? @default(0) @map("ai_messages_used_for_requirements")
+
+  // Profit calculation fields
+  profitMarginPercentage Float? @default(20) @map("profit_margin_percentage") // Default 20% profit
+  recommendedPrice       Float? @map("recommended_price") // Calculated price with profit margin
+
+  // GitHub Integration
+  githubRepository    String?     @map("github_repository") // owner/repo format
+  aiMessageRate       Float?      @map("ai_message_rate") // Price per AI message for AUGMENT milestones
+
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
@@ -48,14 +60,43 @@ model Quote {
   clientId String @map("client_id")
   client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
   project  Project?
+  milestoneEstimations QuoteMilestoneEstimation[]
 
   @@map("quotes")
 }
 
 enum QuoteStatus {
+  DRAFT
   QUOTED
   ACCEPTED
   REJECTED
+}
+
+// Quote Milestone Estimations (for GitHub integration)
+model QuoteMilestoneEstimation {
+  id                    String        @id @default(uuid())
+  githubMilestoneId     Int           @map("github_milestone_id") // GitHub milestone ID
+  milestoneTitle        String        @map("milestone_title")
+  milestoneType         MilestoneType @map("milestone_type")
+
+  // For AUGMENT milestones
+  estimatedMessages     Int?          @map("estimated_messages")
+
+  // For MANUAL milestones
+  fixedPrice           Float?         @map("fixed_price")
+
+  // Calculated fields
+  calculatedPrice      Float          @default(0) @map("calculated_price")
+
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  // Relations
+  quoteId String @map("quote_id")
+  quote   Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@unique([quoteId, githubMilestoneId])
+  @@map("quote_milestone_estimations")
 }
 
 // Project Workflow

@@ -1,8 +1,8 @@
 'use client'
 
-import { Bell, Search } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { NotificationDropdown } from './notification-dropdown'
 
 export function Header() {
   return (
@@ -17,15 +17,10 @@ export function Header() {
             />
           </div>
         </div>
-        
+
         <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="sm" className="relative">
-            <Bell className="w-5 h-5" />
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-              3
-            </span>
-          </Button>
-          
+          <NotificationDropdown />
+
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
               <span className="text-white text-sm font-medium">FL</span>
