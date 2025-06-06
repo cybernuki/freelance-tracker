@@ -122,7 +122,6 @@ async function main() {
   const milestone1 = await prisma.milestone.create({
     data: {
       title: 'Project Setup & Architecture',
-      type: 'MANUAL',
       projectId: project1.id,
     },
   })
@@ -130,7 +129,6 @@ async function main() {
   const milestone2 = await prisma.milestone.create({
     data: {
       title: 'AI Chatbot Development',
-      type: 'AUGMENT',
       projectId: project1.id,
     },
   })

@@ -5,12 +5,16 @@ import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { QuoteForm } from '@/components/forms/quote-form'
 import { CreateProjectForm } from '@/components/forms/create-project-form'
 import { GitHubIntegration } from '@/components/quotes/github-integration'
+import { ProfitCalculator } from '@/components/quotes/profit-calculator'
+import { QuoteProgressBar, calculateQuoteProgress } from '@/components/quotes/quote-progress-bar'
+import { RequirementsManager } from '@/components/quotes/requirements-manager'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { ArrowLeft, Edit, Trash2, CheckCircle, XCircle, FileText, User, Calendar, DollarSign, ExternalLink, FolderPlus, Github } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, CheckCircle, XCircle, FileText, User, Calendar, DollarSign, ExternalLink, FolderPlus, Github, Save, X, Plus } from 'lucide-react'
 import Link from 'next/link'
 
 interface Quote {
@@ -44,6 +48,26 @@ interface Quote {
     name: string
     status: string
   }
+  milestoneEstimations?: {
+    id: string
+    githubMilestoneId: number
+    milestoneTitle: string
+    milestoneType: string
+    estimatedMessages?: number
+    fixedPrice?: number
+    calculatedPrice: number
+    includeInQuote: boolean
+    issueEstimations: {
+      id: string
+      githubIssueId: number
+      issueNumber: number
+      issueTitle: string
+      issueType: string
+      estimatedMessages?: number
+      fixedPrice?: number
+      calculatedPrice: number
+    }[]
+  }[]
 }
 
 export default function QuoteDetailPage() {
@@ -54,12 +78,45 @@ export default function QuoteDetailPage() {
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [editingPricing, setEditingPricing] = useState(false)
+  const [editingRequirements, setEditingRequirements] = useState(false)
+  const [editingTimeline, setEditingTimeline] = useState(false)
+  const [tempPricing, setTempPricing] = useState({
+    priceEstimated: quote?.priceEstimated || 0,
+    minimumPrice: quote?.minimumPrice || 0
+  })
+  const [tempRequirements, setTempRequirements] = useState<string[]>(quote?.requirements || [])
+  const [tempTimeline, setTempTimeline] = useState({
+    startDateEstimated: quote?.startDateEstimated || '',
+    endDateEstimated: quote?.endDateEstimated || ''
+  })
+  const [profitCalculation, setProfitCalculation] = useState({
+    profitMarginPercentage: 20,
+    recommendedPrice: 0,
+    totalCost: 0,
+    profitAmount: 0
+  })
 
   useEffect(() => {
     if (params.id) {
       fetchQuote()
     }
   }, [params.id])
+
+  // Update temp state when quote changes
+  useEffect(() => {
+    if (quote) {
+      setTempPricing({
+        priceEstimated: quote.priceEstimated,
+        minimumPrice: quote.minimumPrice
+      })
+      setTempRequirements(quote.requirements)
+      setTempTimeline({
+        startDateEstimated: quote.startDateEstimated || '',
+        endDateEstimated: quote.endDateEstimated || ''
+      })
+    }
+  }, [quote])
 
   const fetchQuote = async () => {
     try {
@@ -161,6 +218,159 @@ export default function QuoteDetailPage() {
     } catch (error) {
       console.error('Error updating quote status:', error)
       alert('Failed to update quote status. Please try again.')
+    }
+  }
+
+  const handleSavePricing = async () => {
+    try {
+      const response = await fetch(`/api/quotes/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          priceEstimated: tempPricing.priceEstimated,
+          minimumPrice: tempPricing.minimumPrice,
+        }),
+      })
+
+      if (!response.ok) throw new Error('Failed to update pricing')
+
+      setEditingPricing(false)
+      fetchQuote() // Refresh the quote
+    } catch (error) {
+      console.error('Error updating pricing:', error)
+      alert('Failed to update pricing. Please try again.')
+    }
+  }
+
+  const handleSaveRequirements = async () => {
+    try {
+      const response = await fetch(`/api/quotes/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requirements: tempRequirements,
+        }),
+      })
+
+      if (!response.ok) throw new Error('Failed to update requirements')
+
+      setEditingRequirements(false)
+      fetchQuote() // Refresh the quote
+    } catch (error) {
+      console.error('Error updating requirements:', error)
+      alert('Failed to update requirements. Please try again.')
+    }
+  }
+
+  const handleCancelPricing = () => {
+    setTempPricing({
+      priceEstimated: quote?.priceEstimated || 0,
+      minimumPrice: quote?.minimumPrice || 0
+    })
+    setEditingPricing(false)
+  }
+
+  const handleCancelRequirements = () => {
+    setTempRequirements(quote?.requirements || [])
+    setEditingRequirements(false)
+  }
+
+  const handleSaveTimeline = async () => {
+    try {
+      const response = await fetch(`/api/quotes/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startDateEstimated: tempTimeline.startDateEstimated,
+          endDateEstimated: tempTimeline.endDateEstimated,
+        }),
+      })
+
+      if (!response.ok) throw new Error('Failed to update timeline')
+
+      setEditingTimeline(false)
+      fetchQuote() // Refresh the quote
+    } catch (error) {
+      console.error('Error updating timeline:', error)
+      alert('Failed to update timeline. Please try again.')
+    }
+  }
+
+  const handleCancelTimeline = () => {
+    setTempTimeline({
+      startDateEstimated: quote?.startDateEstimated || '',
+      endDateEstimated: quote?.endDateEstimated || ''
+    })
+    setEditingTimeline(false)
+  }
+
+  const handleUpdateEstimatedPrice = async (price: number, milestonesData?: any) => {
+    try {
+      // First save milestones if provided
+      if (milestonesData) {
+        const milestonesResponse = await fetch(`/api/quotes/${params.id}/milestones`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(milestonesData),
+        })
+
+        if (!milestonesResponse.ok) {
+          throw new Error('Failed to save milestones')
+        }
+      }
+
+      // Then update the estimated price
+      const response = await fetch(`/api/quotes/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          priceEstimated: price,
+        }),
+      })
+
+      if (!response.ok) throw new Error('Failed to update estimated price')
+
+      fetchQuote() // Refresh the quote
+    } catch (error) {
+      console.error('Error updating estimated price:', error)
+      alert('Failed to update estimated price. Please try again.')
+    }
+  }
+
+  const handleProfitCalculation = (calculation: any) => {
+    setProfitCalculation(calculation)
+  }
+
+  const handleSaveEstimatedTotal = async (total: number) => {
+    try {
+      const response = await fetch(`/api/quotes/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ savedEstimatedTotal: total }),
+      })
+      if (response.ok) {
+        fetchQuote() // Refresh the quote
+      }
+    } catch (error) {
+      console.error('Error saving estimated total:', error)
+    }
+  }
+
+  const handleSaveEstimatedPrice = async (price: number) => {
+    try {
+      const response = await fetch(`/api/quotes/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          savedEstimatedPrice: price,
+          priceEstimated: price // Also update the main estimated price
+        }),
+      })
+      if (response.ok) {
+        fetchQuote() // Refresh the quote
+      }
+    } catch (error) {
+      console.error('Error saving estimated price:', error)
     }
   }
 
@@ -339,35 +549,97 @@ export default function QuoteDetailPage() {
           )}
 
           {/* Requirements */}
-          {quote.requirements.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Requirements</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2">
-                  {quote.requirements.map((req, index) => (
-                    <li key={index} className="flex items-start gap-2">
-                      <div className="w-2 h-2 bg-blue-600 rounded-full mt-2 flex-shrink-0"></div>
-                      <span className="text-gray-700">{req}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5" />
+                  Requirements
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditingRequirements(true)}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {editingRequirements ? (
+                <RequirementsManager
+                  requirements={tempRequirements}
+                  onRequirementsChange={setTempRequirements}
+                  quoteId={quote.id}
+                  readOnly={false}
+                />
+              ) : (
+                <>
+                  {quote.requirements.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                      <p className="text-sm">No requirements added yet</p>
+                      <p className="text-xs mt-1">Click the + button to add requirements</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {quote.requirements.map((requirement, index) => (
+                        <div key={index} className="border rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Badge variant="outline" className="text-xs">
+                              REQ-{(index + 1).toString().padStart(3, '0')}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-700 leading-relaxed">
+                            {requirement}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {editingRequirements && (
+                <div className="flex gap-2 mt-4">
+                  <Button size="sm" onClick={handleSaveRequirements}>
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Requirements
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleCancelRequirements}>
+                    <X className="w-4 h-4 mr-2" />
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* GitHub Integration */}
           <GitHubIntegration
             quoteId={quote.id}
             currentRepository={quote.githubRepository}
             currentAiMessageRate={quote.aiMessageRate}
+            existingMilestones={quote.milestoneEstimations}
             onUpdate={fetchQuote}
             onMilestonesValidationChange={(isValid) => {
               // This could be used to show validation status in the quote detail page
               console.log('Milestones validation status:', isValid)
             }}
+            onUpdateEstimatedPrice={handleUpdateEstimatedPrice}
           />
+
+          {/* Profit Calculator */}
+          {quote.minimumPrice && quote.minimumPrice > 0 && (
+            <ProfitCalculator
+              minimumPrice={quote.minimumPrice}
+              aiMessagesUsed={quote.aiMessagesUsedForRequirements || 0}
+              aiMessageRate={quote.aiMessageRate || 0.1}
+              onProfitCalculation={handleProfitCalculation}
+              onSaveEstimatedTotal={handleSaveEstimatedTotal}
+              onSaveEstimatedPrice={handleSaveEstimatedPrice}
+            />
+          )}
         </div>
 
         {/* Sidebar */}
@@ -414,32 +686,84 @@ export default function QuoteDetailPage() {
           {/* Pricing */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="w-5 h-5" />
-                Pricing
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-5 h-5" />
+                  Pricing
+                </div>
+                {!editingPricing && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditingPricing(true)}
+                  >
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <p className="text-sm text-gray-600">Estimated Price</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(quote.priceEstimated)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Minimum Price</p>
-                <p className="text-lg font-medium">{formatCurrency(quote.minimumPrice)}</p>
-              </div>
-              {quote.recommendedPrice && quote.recommendedPrice > 0 && (
-                <div className="border-t pt-3">
-                  <p className="text-sm text-gray-600">Recommended Price (with {quote.profitMarginPercentage}% profit)</p>
-                  <p className="text-xl font-bold text-blue-600">{formatCurrency(quote.recommendedPrice)}</p>
+              {editingPricing ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm text-gray-600">Estimated Price</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={tempPricing.priceEstimated}
+                      onChange={(e) => setTempPricing(prev => ({
+                        ...prev,
+                        priceEstimated: parseFloat(e.target.value) || 0
+                      }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-600">Minimum Price</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={tempPricing.minimumPrice}
+                      onChange={(e) => setTempPricing(prev => ({
+                        ...prev,
+                        minimumPrice: parseFloat(e.target.value) || 0
+                      }))}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleSavePricing}>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleCancelPricing}>
+                      <X className="w-4 h-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
-              )}
-              {quote.aiMessagesUsedForRequirements && quote.aiMessagesUsedForRequirements > 0 && (
-                <div className="border-t pt-3">
-                  <p className="text-sm text-gray-600">AI Messages for Requirements</p>
-                  <p className="text-lg font-medium">{quote.aiMessagesUsedForRequirements} messages</p>
-                  <p className="text-xs text-gray-500">Cost: {formatCurrency((quote.aiMessagesUsedForRequirements * (quote.aiMessageRate || 0.1)))}</p>
-                </div>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-sm text-gray-600">Estimated Price</p>
+                    <p className="text-2xl font-bold text-green-600">{formatCurrency(quote.priceEstimated)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Minimum Price</p>
+                    <p className="text-lg font-medium">{formatCurrency(quote.minimumPrice)}</p>
+                  </div>
+                  {quote.recommendedPrice && quote.recommendedPrice > 0 && (
+                    <div className="border-t pt-3">
+                      <p className="text-sm text-gray-600">Recommended Price (with {quote.profitMarginPercentage}% profit)</p>
+                      <p className="text-xl font-bold text-blue-600">{formatCurrency(quote.recommendedPrice)}</p>
+                    </div>
+                  )}
+                  {quote.aiMessagesUsedForRequirements && quote.aiMessagesUsedForRequirements > 0 && (
+                    <div className="border-t pt-3">
+                      <p className="text-sm text-gray-600">AI Messages for Requirements</p>
+                      <p className="text-lg font-medium">{quote.aiMessagesUsedForRequirements} messages</p>
+                      <p className="text-xs text-gray-500">Cost: {formatCurrency((quote.aiMessagesUsedForRequirements * (quote.aiMessageRate || 0.1)))}</p>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -447,9 +771,20 @@ export default function QuoteDetailPage() {
           {/* Timeline */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="w-5 h-5" />
-                Timeline
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5" />
+                  Timeline
+                </div>
+                {!editingTimeline && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditingTimeline(true)}
+                  >
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -457,17 +792,67 @@ export default function QuoteDetailPage() {
                 <p className="text-sm text-gray-600">Created</p>
                 <p className="font-medium">{formatDate(quote.createdAt)}</p>
               </div>
-              {quote.startDateEstimated && (
-                <div>
-                  <p className="text-sm text-gray-600">Estimated Start</p>
-                  <p className="font-medium">{formatDate(quote.startDateEstimated)}</p>
+
+              {editingTimeline ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm text-gray-600">Estimated Start Date</label>
+                    <Input
+                      type="date"
+                      value={tempTimeline.startDateEstimated}
+                      onChange={(e) => setTempTimeline(prev => ({
+                        ...prev,
+                        startDateEstimated: e.target.value
+                      }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-600">Estimated End Date</label>
+                    <Input
+                      type="date"
+                      value={tempTimeline.endDateEstimated}
+                      onChange={(e) => setTempTimeline(prev => ({
+                        ...prev,
+                        endDateEstimated: e.target.value
+                      }))}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleSaveTimeline}>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleCancelTimeline}>
+                      <X className="w-4 h-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
-              )}
-              {quote.endDateEstimated && (
-                <div>
-                  <p className="text-sm text-gray-600">Estimated End</p>
-                  <p className="font-medium">{formatDate(quote.endDateEstimated)}</p>
-                </div>
+              ) : (
+                <>
+                  {quote.startDateEstimated ? (
+                    <div>
+                      <p className="text-sm text-gray-600">Estimated Start</p>
+                      <p className="font-medium">{formatDate(quote.startDateEstimated)}</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-sm text-gray-600">Estimated Start</p>
+                      <p className="text-gray-400 italic">Not set</p>
+                    </div>
+                  )}
+                  {quote.endDateEstimated ? (
+                    <div>
+                      <p className="text-sm text-gray-600">Estimated End</p>
+                      <p className="font-medium">{formatDate(quote.endDateEstimated)}</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-sm text-gray-600">Estimated End</p>
+                      <p className="text-gray-400 italic">Not set</p>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>

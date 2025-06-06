@@ -2,13 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
+const issueEstimationSchema = z.object({
+  githubIssueId: z.number().transform(BigInt), // Convert number to BigInt
+  issueNumber: z.number(),
+  issueTitle: z.string(),
+  issueType: z.enum(['AUGMENT', 'MANUAL']),
+  estimatedMessages: z.number().optional(),
+  fixedPrice: z.number().optional(),
+  calculatedPrice: z.number().default(0),
+})
+
 const milestoneEstimationSchema = z.object({
-  githubMilestoneId: z.number(),
+  githubMilestoneId: z.number().transform(BigInt), // Convert number to BigInt
   milestoneTitle: z.string(),
   milestoneType: z.enum(['AUGMENT', 'MANUAL']),
   estimatedMessages: z.number().optional(),
   fixedPrice: z.number().optional(),
   includeInQuote: z.boolean().default(true),
+  issues: z.array(issueEstimationSchema).optional(),
 })
 
 const updateQuoteRepositorySchema = z.object({
@@ -25,7 +36,11 @@ export async function GET(
     const quote = await prisma.quote.findUnique({
       where: { id: params.id },
       include: {
-        milestoneEstimations: true,
+        milestoneEstimations: {
+          include: {
+            issueEstimations: true,
+          },
+        },
       },
     })
 
@@ -36,10 +51,20 @@ export async function GET(
       )
     }
 
+    // Convert BigInt fields to numbers for JSON serialization
+    const serializedMilestones = quote.milestoneEstimations?.map(milestone => ({
+      ...milestone,
+      githubMilestoneId: Number(milestone.githubMilestoneId),
+      issueEstimations: milestone.issueEstimations?.map(issue => ({
+        ...issue,
+        githubIssueId: Number(issue.githubIssueId),
+      })) || []
+    })) || []
+
     return NextResponse.json({
       githubRepository: quote.githubRepository,
       aiMessageRate: quote.aiMessageRate,
-      milestoneEstimations: quote.milestoneEstimations,
+      milestoneEstimations: serializedMilestones,
     })
   } catch (error) {
     console.error('Error fetching quote milestones:', error)
@@ -81,51 +106,115 @@ export async function POST(
         },
       })
 
-      // If repository is being changed or cleared, remove existing estimations
-      if (validatedData.githubRepository !== existingQuote.githubRepository) {
+      // Clean up orphaned milestones (milestones that no longer exist in GitHub)
+      if (validatedData.githubRepository) {
+        const currentMilestoneIds = validatedData.milestones?.map(m => m.githubMilestoneId) || []
+
+        // Remove milestones that are not in the current list
+        await tx.quoteMilestoneEstimation.deleteMany({
+          where: {
+            quoteId: params.id,
+            githubMilestoneId: {
+              notIn: currentMilestoneIds,
+            },
+          },
+        })
+      } else {
+        // If no repository is selected, remove all estimations
         await tx.quoteMilestoneEstimation.deleteMany({
           where: { quoteId: params.id },
         })
       }
 
-      // Add new milestone estimations if provided
+      // Add or update milestone estimations if provided
       if (validatedData.milestones && validatedData.milestones.length > 0) {
-        const estimationsToCreate = validatedData.milestones.map((milestone) => {
-          let calculatedPrice = 0
-          
-          if (milestone.milestoneType === 'AUGMENT' && milestone.estimatedMessages && validatedData.aiMessageRate) {
-            calculatedPrice = milestone.estimatedMessages * validatedData.aiMessageRate
-          } else if (milestone.milestoneType === 'MANUAL' && milestone.fixedPrice) {
-            calculatedPrice = milestone.fixedPrice
+        for (const milestone of validatedData.milestones) {
+          // Calculate milestone total from issues
+          let milestoneCalculatedPrice = 0
+          if (milestone.issues && milestone.issues.length > 0) {
+            milestoneCalculatedPrice = milestone.issues.reduce((sum, issue) => sum + issue.calculatedPrice, 0)
           }
 
-          return {
-            quoteId: params.id,
-            githubMilestoneId: milestone.githubMilestoneId,
-            milestoneTitle: milestone.milestoneTitle,
-            milestoneType: milestone.milestoneType,
-            estimatedMessages: milestone.estimatedMessages,
-            fixedPrice: milestone.fixedPrice,
-            calculatedPrice,
-            includeInQuote: milestone.includeInQuote,
-          }
-        })
+          // Upsert milestone estimation
+          const upsertedMilestone = await tx.quoteMilestoneEstimation.upsert({
+            where: {
+              quoteId_githubMilestoneId: {
+                quoteId: params.id,
+                githubMilestoneId: milestone.githubMilestoneId,
+              },
+            },
+            update: {
+              milestoneTitle: milestone.milestoneTitle,
+              milestoneType: milestone.milestoneType,
+              estimatedMessages: milestone.estimatedMessages,
+              fixedPrice: milestone.fixedPrice,
+              calculatedPrice: milestoneCalculatedPrice,
+              includeInQuote: milestone.includeInQuote,
+            },
+            create: {
+              quoteId: params.id,
+              githubMilestoneId: milestone.githubMilestoneId,
+              milestoneTitle: milestone.milestoneTitle,
+              milestoneType: milestone.milestoneType,
+              estimatedMessages: milestone.estimatedMessages,
+              fixedPrice: milestone.fixedPrice,
+              calculatedPrice: milestoneCalculatedPrice,
+              includeInQuote: milestone.includeInQuote,
+            },
+          })
 
-        await tx.quoteMilestoneEstimation.createMany({
-          data: estimationsToCreate,
-        })
+          // Remove existing issue estimations for this milestone
+          await tx.quoteIssueEstimation.deleteMany({
+            where: { milestoneEstimationId: upsertedMilestone.id },
+          })
+
+          // Create new issue estimations if provided
+          if (milestone.issues && milestone.issues.length > 0) {
+            const issueEstimationsToCreate = milestone.issues.map((issue) => ({
+              milestoneEstimationId: upsertedMilestone.id,
+              githubIssueId: issue.githubIssueId,
+              issueNumber: issue.issueNumber,
+              issueTitle: issue.issueTitle,
+              issueType: issue.issueType,
+              estimatedMessages: issue.estimatedMessages,
+              fixedPrice: issue.fixedPrice,
+              calculatedPrice: issue.calculatedPrice,
+            }))
+
+            await tx.quoteIssueEstimation.createMany({
+              data: issueEstimationsToCreate,
+            })
+          }
+        }
       }
 
       // Fetch updated quote with estimations
       return await tx.quote.findUnique({
         where: { id: params.id },
         include: {
-          milestoneEstimations: true,
+          milestoneEstimations: {
+            include: {
+              issueEstimations: true,
+            },
+          },
         },
       })
     })
 
-    return NextResponse.json(result)
+    // Convert BigInt fields to numbers for JSON serialization
+    const serializedResult = {
+      ...result,
+      milestoneEstimations: result?.milestoneEstimations?.map(milestone => ({
+        ...milestone,
+        githubMilestoneId: Number(milestone.githubMilestoneId),
+        issueEstimations: milestone.issueEstimations?.map(issue => ({
+          ...issue,
+          githubIssueId: Number(issue.githubIssueId),
+        })) || []
+      })) || []
+    }
+
+    return NextResponse.json(serializedResult)
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

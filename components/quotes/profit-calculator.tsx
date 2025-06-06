@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Calculator, TrendingUp, DollarSign } from 'lucide-react'
+import { Calculator, TrendingUp, DollarSign, Save } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 
 interface ProfitCalculatorProps {
@@ -19,13 +20,17 @@ interface ProfitCalculatorProps {
     totalCost: number
     profitAmount: number
   }) => void
+  onSaveEstimatedTotal?: (total: number) => void
+  onSaveEstimatedPrice?: (price: number) => void
 }
 
-export function ProfitCalculator({ 
-  minimumPrice, 
-  aiMessagesUsed = 0, 
+export function ProfitCalculator({
+  minimumPrice,
+  aiMessagesUsed = 0,
   aiMessageRate = 0.1,
-  onProfitCalculation 
+  onProfitCalculation,
+  onSaveEstimatedTotal,
+  onSaveEstimatedPrice
 }: ProfitCalculatorProps) {
   const [profitMarginPercentage, setProfitMarginPercentage] = useState(20)
   const [customMargin, setCustomMargin] = useState('')
@@ -85,14 +90,14 @@ export function ProfitCalculator({
         {/* Cost Breakdown */}
         <div className="space-y-3">
           <h4 className="font-medium text-sm text-gray-700">Cost Breakdown</h4>
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 gap-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-600">Base Minimum Price:</span>
               <span className="font-medium">{formatCurrency(minimumPrice)}</span>
             </div>
             {aiMessagesUsed > 0 && (
               <div className="flex justify-between">
-                <span className="text-gray-600">AI Messages ({aiMessagesUsed}):</span>
+                <span className="text-gray-600">AI Messages for Requirements ({aiMessagesUsed}):</span>
                 <span className="font-medium">{formatCurrency(aiMessagesCost)}</span>
               </div>
             )}
@@ -101,6 +106,11 @@ export function ProfitCalculator({
               <span>{formatCurrency(totalCost)}</span>
             </div>
           </div>
+          {aiMessagesUsed > 0 && (
+            <p className="text-xs text-gray-500">
+              💡 AI Messages Used for Requirements Analysis: {aiMessagesUsed} × {formatCurrency(aiMessageRate)} = {formatCurrency(aiMessagesCost)}
+            </p>
+          )}
         </div>
 
         {/* Profit Margin Selection */}
@@ -168,6 +178,29 @@ export function ProfitCalculator({
               <span className="text-green-600">{formatCurrency(recommendedPrice)}</span>
             </div>
           </div>
+        </div>
+
+        {/* Save Buttons */}
+        <div className="flex gap-3">
+          {onSaveEstimatedTotal && (
+            <Button
+              onClick={() => onSaveEstimatedTotal(totalCost)}
+              variant="outline"
+              className="flex-1"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Save Estimated Total
+            </Button>
+          )}
+          {onSaveEstimatedPrice && (
+            <Button
+              onClick={() => onSaveEstimatedPrice(recommendedPrice)}
+              className="flex-1"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Save Estimated Price
+            </Button>
+          )}
         </div>
 
         {/* Quick Comparison */}

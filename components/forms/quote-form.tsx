@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { X, Plus, Calculator } from 'lucide-react'
 import { ProfitCalculator } from '@/components/quotes/profit-calculator'
 import { GitHubIntegration } from '@/components/quotes/github-integration'
+import { RequirementsManager } from '@/components/quotes/requirements-manager'
 
 interface Client {
   id: string
@@ -96,17 +97,51 @@ export function QuoteForm({ quote, onSubmit, onCancel, isLoading }: QuoteFormPro
     }))
   }
 
+  const handleSaveEstimatedTotal = async (total: number) => {
+    try {
+      if (quote?.id) {
+        const response = await fetch(`/api/quotes/${quote.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ savedEstimatedTotal: total }),
+        })
+        if (response.ok) {
+          setFormData(prev => ({ ...prev, savedEstimatedTotal: total }))
+        }
+      }
+    } catch (error) {
+      console.error('Error saving estimated total:', error)
+    }
+  }
+
+  const handleSaveEstimatedPrice = async (price: number) => {
+    try {
+      if (quote?.id) {
+        const response = await fetch(`/api/quotes/${quote.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ savedEstimatedPrice: price }),
+        })
+        if (response.ok) {
+          setFormData(prev => ({ ...prev, savedEstimatedPrice: price }))
+        }
+      }
+    } catch (error) {
+      console.error('Error saving estimated price:', error)
+    }
+  }
+
   // Check if quote can be marked as QUOTED
   const canMarkAsQuoted = () => {
+    const hasBasicInfo = formData.name && formData.clientId
     const hasValidPricing = formData.priceEstimated && formData.minimumPrice &&
                            parseFloat(formData.priceEstimated.toString()) > 0 &&
                            parseFloat(formData.minimumPrice.toString()) > 0
     const hasRequirements = requirements.length > 0
-
-    // Check if there are any uncategorized or unestimated milestones
+    const hasTimeline = formData.startDateEstimated && formData.endDateEstimated
     const hasValidMilestones = checkMilestonesValid()
 
-    return hasValidPricing && hasRequirements && hasValidMilestones
+    return hasBasicInfo && hasValidPricing && hasRequirements && hasTimeline && hasValidMilestones
   }
 
   // Check if all milestones are properly categorized and estimated
@@ -271,39 +306,12 @@ export function QuoteForm({ quote, onSubmit, onCancel, isLoading }: QuoteFormPro
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Requirements</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-2">
-            <Input
-              value={newRequirement}
-              onChange={(e) => setNewRequirement(e.target.value)}
-              placeholder="Add a requirement..."
-              onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addRequirement())}
-            />
-            <Button type="button" onClick={addRequirement} variant="outline">
-              <Plus className="w-4 h-4" />
-            </Button>
-          </div>
-          
-          <div className="flex flex-wrap gap-2">
-            {requirements.map((req, index) => (
-              <Badge key={index} variant="secondary" className="flex items-center gap-1">
-                {req}
-                <button
-                  type="button"
-                  onClick={() => removeRequirement(index)}
-                  className="ml-1 hover:text-red-600"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Requirements Management */}
+      <RequirementsManager
+        requirements={requirements}
+        onRequirementsChange={setRequirements}
+        quoteId={quote?.id}
+      />
 
       {/* GitHub Integration */}
       {quote?.id && (
@@ -323,6 +331,8 @@ export function QuoteForm({ quote, onSubmit, onCancel, isLoading }: QuoteFormPro
           aiMessagesUsed={parseInt(formData.aiMessagesUsedForRequirements.toString()) || 0}
           aiMessageRate={0.1} // Default rate, can be made configurable
           onProfitCalculation={handleProfitCalculation}
+          onSaveEstimatedTotal={quote?.id ? handleSaveEstimatedTotal : undefined}
+          onSaveEstimatedPrice={quote?.id ? handleSaveEstimatedPrice : undefined}
         />
       )}
 
@@ -342,6 +352,12 @@ export function QuoteForm({ quote, onSubmit, onCancel, isLoading }: QuoteFormPro
               </p>
               <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2">
+                  <div className={`w-4 h-4 rounded-full ${formData.name && formData.clientId ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                  <span className={formData.name && formData.clientId ? 'text-green-700' : 'text-gray-600'}>
+                    Basic information (name and client)
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
                   <div className={`w-4 h-4 rounded-full ${formData.priceEstimated && formData.minimumPrice &&
                     parseFloat(formData.priceEstimated.toString()) > 0 &&
                     parseFloat(formData.minimumPrice.toString()) > 0 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
@@ -355,6 +371,12 @@ export function QuoteForm({ quote, onSubmit, onCancel, isLoading }: QuoteFormPro
                   <div className={`w-4 h-4 rounded-full ${requirements.length > 0 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
                   <span className={requirements.length > 0 ? 'text-green-700' : 'text-gray-600'}>
                     At least one requirement
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-4 h-4 rounded-full ${formData.startDateEstimated && formData.endDateEstimated ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                  <span className={formData.startDateEstimated && formData.endDateEstimated ? 'text-green-700' : 'text-gray-600'}>
+                    Timeline (estimated start and end dates)
                   </span>
                 </div>
                 <div className="flex items-center gap-2">

@@ -16,6 +16,8 @@ const createQuoteSchema = z.object({
   aiMessagesUsedForRequirements: z.number().min(0).optional(),
   profitMarginPercentage: z.number().min(0).max(100).optional(),
   recommendedPrice: z.number().min(0).optional(),
+  savedEstimatedTotal: z.number().min(0).optional(),
+  savedEstimatedPrice: z.number().min(0).optional(),
   status: z.enum(['DRAFT', 'QUOTED', 'ACCEPTED', 'REJECTED']).optional().default('DRAFT'),
 })
 

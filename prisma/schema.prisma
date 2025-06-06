@@ -49,6 +49,10 @@ model Quote {
   profitMarginPercentage Float? @default(20) @map("profit_margin_percentage") // Default 20% profit
   recommendedPrice       Float? @map("recommended_price") // Calculated price with profit margin
 
+  // New calculator save fields
+  savedEstimatedTotal    Float? @map("saved_estimated_total") // Saved minimum total from calculator
+  savedEstimatedPrice    Float? @map("saved_estimated_price") // Saved final price with profit margin
+
   // GitHub Integration
   githubRepository    String?     @map("github_repository") // owner/repo format
   aiMessageRate       Float?      @map("ai_message_rate") // Price per AI message for AUGMENT milestones
@@ -75,7 +79,7 @@ enum QuoteStatus {
 // Quote Milestone Estimations (for GitHub integration)
 model QuoteMilestoneEstimation {
   id                    String        @id @default(uuid())
-  githubMilestoneId     Int           @map("github_milestone_id") // GitHub milestone ID
+  githubMilestoneId     BigInt        @map("github_milestone_id") // GitHub milestone ID
   milestoneTitle        String        @map("milestone_title")
   milestoneType         MilestoneType @map("milestone_type")
 
@@ -95,9 +99,38 @@ model QuoteMilestoneEstimation {
   // Relations
   quoteId String @map("quote_id")
   quote   Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  issueEstimations QuoteIssueEstimation[]
 
   @@unique([quoteId, githubMilestoneId])
   @@map("quote_milestone_estimations")
+}
+
+// Quote Issue Estimations (individual issue configurations)
+model QuoteIssueEstimation {
+  id                    String        @id @default(uuid())
+  githubIssueId         BigInt        @map("github_issue_id") // GitHub issue ID
+  issueNumber           Int           @map("issue_number")
+  issueTitle            String        @map("issue_title")
+  issueType             IssueType     @map("issue_type")
+
+  // For AUGMENT issues
+  estimatedMessages     Int?          @map("estimated_messages")
+
+  // For MANUAL issues
+  fixedPrice           Float?         @map("fixed_price")
+
+  // Calculated fields
+  calculatedPrice      Float          @default(0) @map("calculated_price")
+
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  // Relations
+  milestoneEstimationId String                   @map("milestone_estimation_id")
+  milestoneEstimation   QuoteMilestoneEstimation @relation(fields: [milestoneEstimationId], references: [id], onDelete: Cascade)
+
+  @@unique([milestoneEstimationId, githubIssueId])
+  @@map("quote_issue_estimations")
 }
 
 // Project Workflow
@@ -141,14 +174,13 @@ enum ProjectStatus {
   CANCELED
 }
 
-// GitHub Integration - Milestones
+// GitHub Integration - Milestones (activity types moved to issues)
 model Milestone {
-  id        String        @id @default(uuid())
+  id        String   @id @default(uuid())
   title     String
-  type      MilestoneType @default(MANUAL)
-  isExtra   Boolean       @default(false) @map("is_extra") // Created after baseline
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  isExtra   Boolean  @default(false) @map("is_extra") // Created after baseline
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   projectId String  @map("project_id")

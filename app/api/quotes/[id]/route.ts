@@ -16,6 +16,8 @@ const updateQuoteSchema = z.object({
   aiMessagesUsedForRequirements: z.number().min(0).optional(),
   profitMarginPercentage: z.number().min(0).max(100).optional(),
   recommendedPrice: z.number().min(0).optional(),
+  savedEstimatedTotal: z.number().min(0).optional(),
+  savedEstimatedPrice: z.number().min(0).optional(),
 })
 
 export async function GET(
@@ -28,6 +30,11 @@ export async function GET(
       include: {
         client: true,
         project: true,
+        milestoneEstimations: {
+          include: {
+            issueEstimations: true,
+          },
+        },
       },
     })
 
@@ -38,7 +45,20 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(quote)
+    // Convert BigInt fields to numbers for JSON serialization
+    const serializedQuote = {
+      ...quote,
+      milestoneEstimations: quote.milestoneEstimations?.map(milestone => ({
+        ...milestone,
+        githubMilestoneId: Number(milestone.githubMilestoneId),
+        issueEstimations: milestone.issueEstimations?.map(issue => ({
+          ...issue,
+          githubIssueId: Number(issue.githubIssueId),
+        })) || []
+      })) || []
+    }
+
+    return NextResponse.json(serializedQuote)
   } catch (error) {
     console.error('Error fetching quote:', error)
     return NextResponse.json(
@@ -111,10 +131,28 @@ export async function PATCH(
       include: {
         client: true,
         project: true,
+        milestoneEstimations: {
+          include: {
+            issueEstimations: true,
+          },
+        },
       },
     })
 
-    return NextResponse.json(quote)
+    // Convert BigInt fields to numbers for JSON serialization
+    const serializedQuote = {
+      ...quote,
+      milestoneEstimations: quote.milestoneEstimations?.map(milestone => ({
+        ...milestone,
+        githubMilestoneId: Number(milestone.githubMilestoneId),
+        issueEstimations: milestone.issueEstimations?.map(issue => ({
+          ...issue,
+          githubIssueId: Number(issue.githubIssueId),
+        })) || []
+      })) || []
+    }
+
+    return NextResponse.json(serializedQuote)
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
