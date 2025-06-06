@@ -179,9 +179,9 @@ export function calculateQuoteProgress(quote: any): QuoteProgressItem[] {
     {
       id: 'pricing',
       label: 'Pricing Information',
-      completed: !!(quote.minimumPrice && quote.minimumPrice > 0 && quote.priceEstimated && quote.priceEstimated > 0),
+      completed: !!(quote.minimumPrice && quote.minimumPrice > 0),
       required: true,
-      description: 'Both minimum price and estimated price must be set'
+      description: 'Minimum price must be set (estimated price is optional)'
     },
     {
       id: 'requirements',
@@ -205,8 +205,8 @@ export function calculateQuoteProgress(quote: any): QuoteProgressItem[] {
           milestone.includeInQuote &&
           milestone.calculatedPrice > 0 &&
           // Ensure issues are loaded and properly estimated
-          milestone.issues && milestone.issues.length > 0 &&
-          milestone.issues.every((issue: any) =>
+          milestone.issueEstimations && milestone.issueEstimations.length > 0 &&
+          milestone.issueEstimations.every((issue: any) =>
             issue.issueType !== 'UNCATEGORIZED' &&
             ((issue.issueType === 'AUGMENT' && issue.estimatedMessages > 0) ||
              (issue.issueType === 'MANUAL' && issue.fixedPrice > 0))

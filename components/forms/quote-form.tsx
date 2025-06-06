@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { X, Plus, Calculator } from 'lucide-react'
 import { ProfitCalculator } from '@/components/quotes/profit-calculator'
 import { GitHubIntegration } from '@/components/quotes/github-integration'
+import { calculateMinimumPrice, calculateAiMessagesCost } from '@/lib/quote-calculations'
 import { RequirementsManager } from '@/components/quotes/requirements-manager'
 
 interface Client {
@@ -59,6 +60,32 @@ export function QuoteForm({ quote, onSubmit, onCancel, isLoading }: QuoteFormPro
   useEffect(() => {
     fetchClients()
   }, [])
+
+  // Auto-calculate minimum price when AI messages change
+  useEffect(() => {
+    if (quote?.id && formData.aiMessagesUsedForRequirements !== undefined) {
+      const aiMessageRate = 0.08 // Default rate, should match the one used in ProfitCalculator
+      const currentMinimumPrice = parseFloat(formData.minimumPrice.toString()) || 0
+      const currentAiMessages = quote.aiMessagesUsedForRequirements || 0
+      const newAiMessages = parseInt(formData.aiMessagesUsedForRequirements.toString()) || 0
+
+      // Only recalculate if AI messages changed
+      if (currentAiMessages !== newAiMessages) {
+        // Get base price (minimum price without current AI messages cost)
+        const currentAiCost = currentAiMessages * aiMessageRate
+        const basePrice = Math.max(0, currentMinimumPrice - currentAiCost)
+
+        // Calculate new minimum price with new AI messages cost
+        const newAiCost = newAiMessages * aiMessageRate
+        const newMinimumPrice = basePrice + newAiCost
+
+        setFormData(prev => ({
+          ...prev,
+          minimumPrice: newMinimumPrice.toFixed(2)
+        }))
+      }
+    }
+  }, [formData.aiMessagesUsedForRequirements, quote?.id])
 
   const fetchClients = async () => {
     try {
@@ -329,7 +356,7 @@ export function QuoteForm({ quote, onSubmit, onCancel, isLoading }: QuoteFormPro
         <ProfitCalculator
           minimumPrice={parseFloat(formData.minimumPrice.toString()) || 0}
           aiMessagesUsed={parseInt(formData.aiMessagesUsedForRequirements.toString()) || 0}
-          aiMessageRate={0.1} // Default rate, can be made configurable
+          aiMessageRate={0.08} // Default rate, can be made configurable
           onProfitCalculation={handleProfitCalculation}
           onSaveEstimatedTotal={quote?.id ? handleSaveEstimatedTotal : undefined}
           onSaveEstimatedPrice={quote?.id ? handleSaveEstimatedPrice : undefined}

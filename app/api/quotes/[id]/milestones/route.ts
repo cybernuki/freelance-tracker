@@ -7,15 +7,15 @@ const issueEstimationSchema = z.object({
   issueNumber: z.number(),
   issueTitle: z.string(),
   issueType: z.enum(['AUGMENT', 'MANUAL']),
-  estimatedMessages: z.number().optional(),
-  fixedPrice: z.number().optional(),
+  estimatedMessages: z.number().nullable().optional(),
+  fixedPrice: z.number().nullable().optional(),
   calculatedPrice: z.number().default(0),
 })
 
 const milestoneEstimationSchema = z.object({
   githubMilestoneId: z.number().transform(BigInt), // Convert number to BigInt
   milestoneTitle: z.string(),
-  milestoneType: z.enum(['AUGMENT', 'MANUAL']),
+  // milestoneType is calculated automatically based on issues
   estimatedMessages: z.number().optional(),
   fixedPrice: z.number().optional(),
   includeInQuote: z.boolean().default(true),
@@ -81,7 +81,9 @@ export async function POST(
 ) {
   try {
     const body = await request.json()
+    console.log('Received payload:', JSON.stringify(body, null, 2))
     const validatedData = updateQuoteRepositorySchema.parse(body)
+    console.log('Validated data processed successfully')
 
     // Check if quote exists
     const existingQuote = await prisma.quote.findUnique({
@@ -135,6 +137,8 @@ export async function POST(
             milestoneCalculatedPrice = milestone.issues.reduce((sum, issue) => sum + issue.calculatedPrice, 0)
           }
 
+
+
           // Upsert milestone estimation
           const upsertedMilestone = await tx.quoteMilestoneEstimation.upsert({
             where: {
@@ -145,7 +149,6 @@ export async function POST(
             },
             update: {
               milestoneTitle: milestone.milestoneTitle,
-              milestoneType: milestone.milestoneType,
               estimatedMessages: milestone.estimatedMessages,
               fixedPrice: milestone.fixedPrice,
               calculatedPrice: milestoneCalculatedPrice,
@@ -155,7 +158,6 @@ export async function POST(
               quoteId: params.id,
               githubMilestoneId: milestone.githubMilestoneId,
               milestoneTitle: milestone.milestoneTitle,
-              milestoneType: milestone.milestoneType,
               estimatedMessages: milestone.estimatedMessages,
               fixedPrice: milestone.fixedPrice,
               calculatedPrice: milestoneCalculatedPrice,
@@ -217,6 +219,7 @@ export async function POST(
     return NextResponse.json(serializedResult)
   } catch (error) {
     if (error instanceof z.ZodError) {
+      console.error('Zod validation error:', error.errors)
       return NextResponse.json(
         { error: 'Validation failed', details: error.errors },
         { status: 400 }

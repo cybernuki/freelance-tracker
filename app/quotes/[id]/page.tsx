@@ -7,14 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { QuoteForm } from '@/components/forms/quote-form'
 import { CreateProjectForm } from '@/components/forms/create-project-form'
 import { GitHubIntegration } from '@/components/quotes/github-integration'
 import { ProfitCalculator } from '@/components/quotes/profit-calculator'
 import { QuoteProgressBar, calculateQuoteProgress } from '@/components/quotes/quote-progress-bar'
 import { RequirementsManager } from '@/components/quotes/requirements-manager'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { ArrowLeft, Edit, Trash2, CheckCircle, XCircle, FileText, User, Calendar, DollarSign, ExternalLink, FolderPlus, Github, Save, X, Plus } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, CheckCircle, XCircle, FileText, User, Calendar, DollarSign, ExternalLink, FolderPlus, Github, Save, X, Plus, ChevronDown, ChevronUp, Calculator } from 'lucide-react'
 import Link from 'next/link'
 
 interface Quote {
@@ -75,12 +74,16 @@ export default function QuoteDetailPage() {
   const router = useRouter()
   const [quote, setQuote] = useState<Quote | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showEditDialog, setShowEditDialog] = useState(false)
+
   const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
   const [editingPricing, setEditingPricing] = useState(false)
   const [editingRequirements, setEditingRequirements] = useState(false)
   const [editingTimeline, setEditingTimeline] = useState(false)
+  const [showProfitCalculator, setShowProfitCalculator] = useState(false)
+  const [editingAiMessages, setEditingAiMessages] = useState(false)
+  const [aiMessagesInput, setAiMessagesInput] = useState('')
   const [tempPricing, setTempPricing] = useState({
     priceEstimated: quote?.priceEstimated || 0,
     minimumPrice: quote?.minimumPrice || 0
@@ -139,26 +142,7 @@ export default function QuoteDetailPage() {
     }
   }
 
-  const handleEditQuote = async (data: any) => {
-    try {
-      setIsSubmitting(true)
-      const response = await fetch(`/api/quotes/${params.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
 
-      if (!response.ok) throw new Error('Failed to update quote')
-
-      setShowEditDialog(false)
-      fetchQuote() // Refresh the quote
-    } catch (error) {
-      console.error('Error updating quote:', error)
-      alert('Failed to update quote. Please try again.')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
 
   const handleCreateProject = async (data: any) => {
     try {
@@ -223,6 +207,8 @@ export default function QuoteDetailPage() {
 
   const handleSavePricing = async () => {
     try {
+      // Note: When manually editing minimum price, we assume it already includes AI messages cost
+      // The user is responsible for ensuring the price is correct
       const response = await fetch(`/api/quotes/${params.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -319,21 +305,27 @@ export default function QuoteDetailPage() {
         }
       }
 
-      // Then update the estimated price
+      // Calculate minimum price including AI messages for requirements
+      const aiMessagesUsed = quote?.aiMessagesUsedForRequirements || 0
+      const aiMessageRate = quote?.aiMessageRate || 0.08
+      const aiMessagesCost = aiMessagesUsed * aiMessageRate
+      const totalMinimumPrice = price + aiMessagesCost
+
+      // Then update the minimum price
       const response = await fetch(`/api/quotes/${params.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          priceEstimated: price,
+          minimumPrice: totalMinimumPrice,
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to update estimated price')
+      if (!response.ok) throw new Error('Failed to update minimum price')
 
       fetchQuote() // Refresh the quote
     } catch (error) {
-      console.error('Error updating estimated price:', error)
-      alert('Failed to update estimated price. Please try again.')
+      console.error('Error updating minimum price:', error)
+      alert('Failed to update minimum price. Please try again.')
     }
   }
 
@@ -341,20 +333,7 @@ export default function QuoteDetailPage() {
     setProfitCalculation(calculation)
   }
 
-  const handleSaveEstimatedTotal = async (total: number) => {
-    try {
-      const response = await fetch(`/api/quotes/${params.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ savedEstimatedTotal: total }),
-      })
-      if (response.ok) {
-        fetchQuote() // Refresh the quote
-      }
-    } catch (error) {
-      console.error('Error saving estimated total:', error)
-    }
-  }
+
 
   const handleSaveEstimatedPrice = async (price: number) => {
     try {
@@ -371,6 +350,35 @@ export default function QuoteDetailPage() {
       }
     } catch (error) {
       console.error('Error saving estimated price:', error)
+    }
+  }
+
+  const handleSaveAiMessages = async () => {
+    try {
+      const aiMessagesUsed = parseInt(aiMessagesInput) || 0
+      const aiMessageRate = quote?.aiMessageRate || 0.08
+
+      // Calculate new minimum price including AI messages cost
+      const baseMilestonePrice = quote?.minimumPrice || 0
+      const currentAiMessagesCost = (quote?.aiMessagesUsedForRequirements || 0) * aiMessageRate
+      const basePrice = Math.max(0, baseMilestonePrice - currentAiMessagesCost)
+      const newAiMessagesCost = aiMessagesUsed * aiMessageRate
+      const newMinimumPrice = basePrice + newAiMessagesCost
+
+      const response = await fetch(`/api/quotes/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          aiMessagesUsedForRequirements: aiMessagesUsed,
+          minimumPrice: newMinimumPrice
+        }),
+      })
+      if (response.ok) {
+        setEditingAiMessages(false)
+        fetchQuote() // Refresh the quote
+      }
+    } catch (error) {
+      console.error('Error saving AI messages:', error)
     }
   }
 
@@ -424,10 +432,7 @@ export default function QuoteDetailPage() {
           <Badge variant={getStatusBadgeVariant(quote.status)}>
             {quote.status}
           </Badge>
-          <Button variant="outline" onClick={() => setShowEditDialog(true)}>
-            <Edit className="w-4 h-4 mr-2" />
-            Edit
-          </Button>
+
           <Button variant="outline" onClick={handleDeleteQuote}>
             <Trash2 className="w-4 h-4 mr-2" />
             Delete
@@ -435,29 +440,12 @@ export default function QuoteDetailPage() {
         </div>
       </div>
 
-      {/* Status Actions */}
+      {/* Quote Progress Bar */}
       {quote.status === 'DRAFT' && (
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium text-yellow-900">Draft Quote</h3>
-                <p className="text-sm text-yellow-700">
-                  This quote is incomplete. Add pricing information and requirements to mark it as quoted.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowEditDialog(true)}
-                className="border-yellow-300 text-yellow-700 hover:bg-yellow-100"
-              >
-                <Edit className="w-4 h-4 mr-2" />
-                Complete Quote
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <QuoteProgressBar
+          status={quote.status}
+          progressItems={calculateQuoteProgress(quote)}
+        />
       )}
 
       {quote.status === 'QUOTED' && (
@@ -615,31 +603,94 @@ export default function QuoteDetailPage() {
             </CardContent>
           </Card>
 
-          {/* GitHub Integration */}
-          <GitHubIntegration
-            quoteId={quote.id}
-            currentRepository={quote.githubRepository}
-            currentAiMessageRate={quote.aiMessageRate}
-            existingMilestones={quote.milestoneEstimations}
-            onUpdate={fetchQuote}
-            onMilestonesValidationChange={(isValid) => {
-              // This could be used to show validation status in the quote detail page
-              console.log('Milestones validation status:', isValid)
-            }}
-            onUpdateEstimatedPrice={handleUpdateEstimatedPrice}
-          />
+          {/* Project Tasks & Configuration */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Github className="w-5 h-5" />
+                Project Tasks & Configuration
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* AI Messages Used for Requirements Analysis */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-blue-600" />
+                    <h4 className="font-medium text-blue-900">AI Messages Used for Requirements Analysis</h4>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {editingAiMessages ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min="0"
+                          value={aiMessagesInput}
+                          onChange={(e) => setAiMessagesInput(e.target.value)}
+                          className="w-20 h-8 no-spinner"
+                        />
+                        <Button size="sm" onClick={handleSaveAiMessages}>
+                          <Save className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setEditingAiMessages(false)
+                            setAiMessagesInput(String(quote.aiMessagesUsedForRequirements || 0))
+                          }}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="text-right">
+                        <div className="flex items-center gap-2">
+                          <div className="text-lg font-bold text-blue-600">
+                            {quote.aiMessagesUsedForRequirements || 0} messages
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingAiMessages(true)
+                              setAiMessagesInput(String(quote.aiMessagesUsedForRequirements || 0))
+                            }}
+                          >
+                            <Edit className="w-3 h-3" />
+                          </Button>
+                        </div>
+                        {quote.aiMessageRate && quote.aiMessagesUsedForRequirements && (
+                          <div className="text-sm text-blue-700">
+                            Cost: {formatCurrency((quote.aiMessagesUsedForRequirements * quote.aiMessageRate))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <p className="text-sm text-blue-700">
+                  Number of AI messages used to analyze and transform project requirements into actionable tasks.
+                </p>
+              </div>
 
-          {/* Profit Calculator */}
-          {quote.minimumPrice && quote.minimumPrice > 0 && (
-            <ProfitCalculator
-              minimumPrice={quote.minimumPrice}
-              aiMessagesUsed={quote.aiMessagesUsedForRequirements || 0}
-              aiMessageRate={quote.aiMessageRate || 0.1}
-              onProfitCalculation={handleProfitCalculation}
-              onSaveEstimatedTotal={handleSaveEstimatedTotal}
-              onSaveEstimatedPrice={handleSaveEstimatedPrice}
-            />
-          )}
+              {/* GitHub Integration Component */}
+              <GitHubIntegration
+                quoteId={quote.id}
+                currentRepository={quote.githubRepository}
+                currentAiMessageRate={quote.aiMessageRate}
+                existingMilestones={quote.milestoneEstimations}
+                onUpdate={fetchQuote}
+                onMilestonesValidationChange={(isValid: boolean) => {
+                  // This could be used to show validation status in the quote detail page
+                  console.log('Milestones validation status:', isValid)
+                }}
+                onUpdateEstimatedPrice={handleUpdateEstimatedPrice}
+              />
+            </CardContent>
+          </Card>
+
+
         </div>
 
         {/* Sidebar */}
@@ -691,15 +742,27 @@ export default function QuoteDetailPage() {
                   <DollarSign className="w-5 h-5" />
                   Pricing
                 </div>
-                {!editingPricing && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setEditingPricing(true)}
-                  >
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {quote.minimumPrice && quote.minimumPrice > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowProfitCalculator(!showProfitCalculator)}
+                    >
+                      <Calculator className="w-4 h-4 mr-1" />
+                      {showProfitCalculator ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </Button>
+                  )}
+                  {!editingPricing && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEditingPricing(true)}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -715,6 +778,7 @@ export default function QuoteDetailPage() {
                         ...prev,
                         priceEstimated: parseFloat(e.target.value) || 0
                       }))}
+                      className="no-spinner"
                     />
                   </div>
                   <div>
@@ -727,6 +791,7 @@ export default function QuoteDetailPage() {
                         ...prev,
                         minimumPrice: parseFloat(e.target.value) || 0
                       }))}
+                      className="no-spinner"
                     />
                   </div>
                   <div className="flex gap-2">
@@ -756,17 +821,29 @@ export default function QuoteDetailPage() {
                       <p className="text-xl font-bold text-blue-600">{formatCurrency(quote.recommendedPrice)}</p>
                     </div>
                   )}
-                  {quote.aiMessagesUsedForRequirements && quote.aiMessagesUsedForRequirements > 0 && (
-                    <div className="border-t pt-3">
-                      <p className="text-sm text-gray-600">AI Messages for Requirements</p>
-                      <p className="text-lg font-medium">{quote.aiMessagesUsedForRequirements} messages</p>
-                      <p className="text-xs text-gray-500">Cost: {formatCurrency((quote.aiMessagesUsedForRequirements * (quote.aiMessageRate || 0.1)))}</p>
-                    </div>
-                  )}
+                  <div className="border-t pt-3">
+                    <p className="text-sm text-gray-600">AI Messages for Requirements</p>
+                    <p className="text-lg font-medium">{quote.aiMessagesUsedForRequirements || 0} messages</p>
+                    <p className="text-xs text-gray-500">Cost: {formatCurrency(((quote.aiMessagesUsedForRequirements || 0) * (quote.aiMessageRate || 0.08)))}</p>
+                  </div>
                 </>
+              )}
+
+              {/* Profit Calculator Dropdown */}
+              {showProfitCalculator && quote.minimumPrice && quote.minimumPrice > 0 && (
+                <div className="mt-6 pt-6 border-t">
+                  <ProfitCalculator
+                    minimumPrice={quote.minimumPrice}
+                    aiMessagesUsed={quote.aiMessagesUsedForRequirements || 0}
+                    aiMessageRate={quote.aiMessageRate || 0.08}
+                    onProfitCalculation={handleProfitCalculation}
+                    onSaveEstimatedPrice={handleSaveEstimatedPrice}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
+
 
           {/* Timeline */}
           <Card>
@@ -881,20 +958,7 @@ export default function QuoteDetailPage() {
         </div>
       </div>
 
-      {/* Edit Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Quote</DialogTitle>
-          </DialogHeader>
-          <QuoteForm
-            quote={quote}
-            onSubmit={handleEditQuote}
-            onCancel={() => setShowEditDialog(false)}
-            isLoading={isSubmitting}
-          />
-        </DialogContent>
-      </Dialog>
+
 
       {/* Create Project Dialog */}
       <Dialog open={showCreateProjectDialog} onOpenChange={setShowCreateProjectDialog}>

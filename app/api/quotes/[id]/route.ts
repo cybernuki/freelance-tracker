@@ -112,6 +112,7 @@ export async function PATCH(
     if (validatedData.minimumPrice !== undefined) updateData.minimumPrice = validatedData.minimumPrice
     if (validatedData.requirements !== undefined) updateData.requirements = validatedData.requirements
     if (validatedData.status !== undefined) updateData.status = validatedData.status
+    if (validatedData.aiMessagesUsedForRequirements !== undefined) updateData.aiMessagesUsedForRequirements = validatedData.aiMessagesUsedForRequirements
     
     if (validatedData.startDateEstimated !== undefined) {
       updateData.startDateEstimated = validatedData.startDateEstimated 

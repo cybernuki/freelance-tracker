@@ -16,6 +16,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 interface Quote {
+  endDateEstimated: any
   id: string
   reference: number
   name: string
@@ -60,7 +61,6 @@ export default function QuotesPage() {
     pages: 0,
   })
   const [showCreateDialog, setShowCreateDialog] = useState(false)
-  const [editingQuote, setEditingQuote] = useState<Quote | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const fetchQuotes = async () => {
@@ -129,28 +129,7 @@ export default function QuotesPage() {
     }
   }
 
-  const handleEditQuote = async (data: any) => {
-    if (!editingQuote) return
 
-    try {
-      setIsSubmitting(true)
-      const response = await fetch(`/api/quotes/${editingQuote.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-
-      if (!response.ok) throw new Error('Failed to update quote')
-
-      setEditingQuote(null)
-      fetchQuotes() // Refresh the list
-    } catch (error) {
-      console.error('Error updating quote:', error)
-      alert('Failed to update quote. Please try again.')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
 
   const handleDeleteQuote = async (quoteId: string) => {
     if (!confirm('Are you sure you want to delete this quote?')) return
@@ -360,9 +339,11 @@ export default function QuotesPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setEditingQuote(quote)}
+                            asChild
                           >
-                            <Edit className="w-4 h-4" />
+                            <Link href={`/quotes/${quote.id}`}>
+                              <Edit className="w-4 h-4" />
+                            </Link>
                           </Button>
                           <Button
                             variant="ghost"
@@ -414,22 +395,7 @@ export default function QuotesPage() {
         </CardContent>
       </Card>
 
-      {/* Edit Quote Dialog */}
-      <Dialog open={!!editingQuote} onOpenChange={() => setEditingQuote(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Quote</DialogTitle>
-          </DialogHeader>
-          {editingQuote && (
-            <QuoteForm
-              quote={editingQuote}
-              onSubmit={handleEditQuote}
-              onCancel={() => setEditingQuote(null)}
-              isLoading={isSubmitting}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+
     </div>
   )
 }

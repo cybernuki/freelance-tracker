@@ -20,26 +20,24 @@ interface ProfitCalculatorProps {
     totalCost: number
     profitAmount: number
   }) => void
-  onSaveEstimatedTotal?: (total: number) => void
   onSaveEstimatedPrice?: (price: number) => void
 }
 
 export function ProfitCalculator({
   minimumPrice,
   aiMessagesUsed = 0,
-  aiMessageRate = 0.1,
+  aiMessageRate = 0.08,
   onProfitCalculation,
-  onSaveEstimatedTotal,
   onSaveEstimatedPrice
 }: ProfitCalculatorProps) {
   const [profitMarginPercentage, setProfitMarginPercentage] = useState(20)
   const [customMargin, setCustomMargin] = useState('')
   const [isCustomMargin, setIsCustomMargin] = useState(false)
 
-  // Calculate costs
+  // Calculate costs - minimumPrice now already includes AI messages cost
   const aiMessagesCost = aiMessagesUsed * aiMessageRate
-  const totalCost = minimumPrice + aiMessagesCost
-  
+  const totalCost = minimumPrice // minimumPrice already includes AI messages cost
+
   // Calculate profit and recommended price
   const currentMargin = isCustomMargin ? parseFloat(customMargin) || 0 : profitMarginPercentage
   const profitAmount = totalCost * (currentMargin / 100)
@@ -92,13 +90,13 @@ export function ProfitCalculator({
           <h4 className="font-medium text-sm text-gray-700">Cost Breakdown</h4>
           <div className="grid grid-cols-1 gap-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-600">Base Minimum Price:</span>
+              <span className="text-gray-600">Minimum Price (includes AI messages):</span>
               <span className="font-medium">{formatCurrency(minimumPrice)}</span>
             </div>
             {aiMessagesUsed > 0 && (
-              <div className="flex justify-between">
-                <span className="text-gray-600">AI Messages for Requirements ({aiMessagesUsed}):</span>
-                <span className="font-medium">{formatCurrency(aiMessagesCost)}</span>
+              <div className="flex justify-between text-xs text-gray-500 ml-4">
+                <span>• AI Messages for Requirements ({aiMessagesUsed}):</span>
+                <span>{formatCurrency(aiMessagesCost)}</span>
               </div>
             )}
             <div className="flex justify-between border-t pt-2 font-medium">
@@ -180,28 +178,16 @@ export function ProfitCalculator({
           </div>
         </div>
 
-        {/* Save Buttons */}
-        <div className="flex gap-3">
-          {onSaveEstimatedTotal && (
-            <Button
-              onClick={() => onSaveEstimatedTotal(totalCost)}
-              variant="outline"
-              className="flex-1"
-            >
-              <Save className="w-4 h-4 mr-2" />
-              Save Estimated Total
-            </Button>
-          )}
-          {onSaveEstimatedPrice && (
-            <Button
-              onClick={() => onSaveEstimatedPrice(recommendedPrice)}
-              className="flex-1"
-            >
-              <Save className="w-4 h-4 mr-2" />
-              Save Estimated Price
-            </Button>
-          )}
-        </div>
+        {/* Save Button */}
+        {onSaveEstimatedPrice && (
+          <Button
+            onClick={() => onSaveEstimatedPrice(recommendedPrice)}
+            className="w-full"
+          >
+            <Save className="w-4 h-4 mr-2" />
+            Save Estimated Price ({formatCurrency(recommendedPrice)})
+          </Button>
+        )}
 
         {/* Quick Comparison */}
         <div className="text-xs text-gray-500 space-y-1">

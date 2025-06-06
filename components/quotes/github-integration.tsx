@@ -92,7 +92,7 @@ export function GitHubIntegration({
   const [milestones, setMilestones] = useState<GitHubMilestone[]>([])
   const [milestoneIssues, setMilestoneIssues] = useState<{[key: number]: GitHubIssue[]}>({})
   const [estimations, setEstimations] = useState<MilestoneEstimation[]>([])
-  const [aiMessageRate, setAiMessageRate] = useState(currentAiMessageRate || 0.1)
+  const [aiMessageRate, setAiMessageRate] = useState(currentAiMessageRate || 0.08)
   const [copToUsdRate, setCopToUsdRate] = useState(4200) // Default COP to USD rate
 
   const [loadingRepositories, setLoadingRepositories] = useState(false)
@@ -173,7 +173,7 @@ export function GitHubIntegration({
       if (response.ok) {
         const data = await response.json()
         setSelectedRepository(data.githubRepository || '')
-        setAiMessageRate(data.aiMessageRate || 0.1)
+        setAiMessageRate(data.aiMessageRate || 0.08)
         // Convert old format to new format if needed
         // setEstimations(data.milestoneEstimations || [])
       }
@@ -452,21 +452,12 @@ export function GitHubIntegration({
           issue.issueType === 'AUGMENT' || issue.issueType === 'MANUAL'
         )
 
-        // Determine milestone type based on valid issues
-        const hasAugmentIssues = validIssues.some(issue => issue.issueType === 'AUGMENT')
-        const hasManualIssues = validIssues.some(issue => issue.issueType === 'MANUAL')
-        let milestoneType: 'AUGMENT' | 'MANUAL' = 'MANUAL'
-
-        if (hasAugmentIssues && !hasManualIssues) {
-          milestoneType = 'AUGMENT'
-        } else if (!hasAugmentIssues && hasManualIssues) {
-          milestoneType = 'MANUAL'
-        }
+        // milestoneType is now calculated automatically in the backend
 
         return {
           githubMilestoneId: estimation.githubMilestoneId,
           milestoneTitle: estimation.milestoneTitle,
-          milestoneType,
+          // milestoneType is calculated automatically in the backend
           calculatedPrice: estimation.calculatedPrice,
           includeInQuote: estimation.includeInQuote,
           issues: validIssues.map(issue => ({
@@ -512,10 +503,36 @@ export function GitHubIntegration({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Github className="w-5 h-5" />
-          GitHub Integration
+          Project Tasks & Configuration
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* AI Message Rate and COP Rate Configuration - Moved to the top */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label>AI Message Rate ($ per message)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={aiMessageRate}
+              onChange={(e) => setAiMessageRate(parseFloat(e.target.value) || 0)}
+            />
+          </div>
+          <div>
+            <Label>COP to USD Rate</Label>
+            <Input
+              type="number"
+              min="0"
+              value={copToUsdRate}
+              onChange={(e) => setCopToUsdRate(parseFloat(e.target.value) || 0)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              AI Rate in COP: {formatCurrency(aiMessageRate * copToUsdRate, 'COP')}
+            </p>
+          </div>
+        </div>
+
         {/* Repository Search */}
         <div className="space-y-4">
           <div>
@@ -527,8 +544,8 @@ export function GitHubIntegration({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && searchRepositories()}
               />
-              <Button 
-                onClick={searchRepositories} 
+              <Button
+                onClick={searchRepositories}
                 disabled={loadingRepositories || !searchQuery.trim()}
               >
                 {loadingRepositories ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
@@ -547,6 +564,11 @@ export function GitHubIntegration({
                   {repositories.map((repo) => (
                     <SelectItem key={repo.id} value={repo.full_name}>
                       <div className="flex items-center gap-2">
+                        <img
+                          src={repo.owner.avatar_url}
+                          alt={repo.owner.login}
+                          className="w-4 h-4 rounded-full"
+                        />
                         <span>{repo.full_name}</span>
                         {repo.private && <Badge variant="secondary" className="text-xs">Private</Badge>}
                       </div>
@@ -558,33 +580,7 @@ export function GitHubIntegration({
           )}
         </div>
 
-        {/* AI Message Rate Configuration */}
-        {selectedRepository && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label>AI Message Rate ($ per message)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={aiMessageRate}
-                onChange={(e) => setAiMessageRate(parseFloat(e.target.value) || 0)}
-              />
-            </div>
-            <div>
-              <Label>COP to USD Rate</Label>
-              <Input
-                type="number"
-                min="0"
-                value={copToUsdRate}
-                onChange={(e) => setCopToUsdRate(parseFloat(e.target.value) || 0)}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                AI Rate in COP: {formatCurrency(aiMessageRate * copToUsdRate, 'COP')}
-              </p>
-            </div>
-          </div>
-        )}
+
 
         {/* Milestones */}
         {selectedRepository && (
@@ -816,21 +812,12 @@ export function GitHubIntegration({
                             return null
                           }
 
-                          // Determine milestone type based on valid issues
-                          const hasAugmentIssues = validIssues.some(issue => issue.issueType === 'AUGMENT')
-                          const hasManualIssues = validIssues.some(issue => issue.issueType === 'MANUAL')
-                          let milestoneType: 'AUGMENT' | 'MANUAL' = 'MANUAL'
-
-                          if (hasAugmentIssues && !hasManualIssues) {
-                            milestoneType = 'AUGMENT'
-                          } else if (!hasAugmentIssues && hasManualIssues) {
-                            milestoneType = 'MANUAL'
-                          }
+                          // milestoneType is now calculated automatically in the backend
 
                           return {
                             githubMilestoneId: estimation.githubMilestoneId,
                             milestoneTitle: estimation.milestoneTitle,
-                            milestoneType,
+                            // milestoneType is calculated automatically in the backend
                             // Use undefined instead of null for optional fields
                             estimatedMessages: undefined,
                             fixedPrice: undefined,

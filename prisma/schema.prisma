@@ -81,7 +81,7 @@ model QuoteMilestoneEstimation {
   id                    String        @id @default(uuid())
   githubMilestoneId     BigInt        @map("github_milestone_id") // GitHub milestone ID
   milestoneTitle        String        @map("milestone_title")
-  milestoneType         MilestoneType @map("milestone_type")
+
 
   // For AUGMENT milestones
   estimatedMessages     Int?          @map("estimated_messages")
@@ -190,10 +190,7 @@ model Milestone {
   @@map("milestones")
 }
 
-enum MilestoneType {
-  MANUAL
-  AUGMENT
-}
+
 
 // GitHub Integration - Issues
 model Issue {
