@@ -363,6 +363,10 @@ export default function QuoteDetailPage() {
             currentRepository={quote.githubRepository}
             currentAiMessageRate={quote.aiMessageRate}
             onUpdate={fetchQuote}
+            onMilestonesValidationChange={(isValid) => {
+              // This could be used to show validation status in the quote detail page
+              console.log('Milestones validation status:', isValid)
+            }}
           />
         </div>
 

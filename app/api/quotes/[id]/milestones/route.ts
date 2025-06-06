@@ -8,6 +8,7 @@ const milestoneEstimationSchema = z.object({
   milestoneType: z.enum(['AUGMENT', 'MANUAL']),
   estimatedMessages: z.number().optional(),
   fixedPrice: z.number().optional(),
+  includeInQuote: z.boolean().default(true),
 })
 
 const updateQuoteRepositorySchema = z.object({
@@ -106,6 +107,7 @@ export async function POST(
             estimatedMessages: milestone.estimatedMessages,
             fixedPrice: milestone.fixedPrice,
             calculatedPrice,
+            includeInQuote: milestone.includeInQuote,
           }
         })
 

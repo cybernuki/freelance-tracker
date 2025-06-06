@@ -90,17 +90,21 @@ export async function POST(request: NextRequest) {
         name: validatedData.name,
         description: validatedData.description,
         clientId: validatedData.clientId,
-        startDateEstimated: validatedData.startDateEstimated 
-          ? new Date(validatedData.startDateEstimated) 
+        startDateEstimated: validatedData.startDateEstimated
+          ? new Date(validatedData.startDateEstimated)
           : null,
-        endDateEstimated: validatedData.endDateEstimated 
-          ? new Date(validatedData.endDateEstimated) 
+        endDateEstimated: validatedData.endDateEstimated
+          ? new Date(validatedData.endDateEstimated)
           : null,
         source: validatedData.source,
         sourceLink: validatedData.sourceLink || null,
         priceEstimated: validatedData.priceEstimated,
         minimumPrice: validatedData.minimumPrice,
         requirements: validatedData.requirements,
+        status: validatedData.status || 'DRAFT', // Explicitly set status
+        aiMessagesUsedForRequirements: validatedData.aiMessagesUsedForRequirements,
+        profitMarginPercentage: validatedData.profitMarginPercentage,
+        recommendedPrice: validatedData.recommendedPrice,
       },
       include: {
         client: true,

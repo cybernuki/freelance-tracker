@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatCurrency } from '@/lib/utils'
-import { Github, Search, RefreshCw, Calculator, Zap, Wrench } from 'lucide-react'
+import { Github, Search, RefreshCw, Calculator, Zap, Wrench, AlertTriangle } from 'lucide-react'
 
 interface GitHubRepository {
   id: number
@@ -40,6 +40,7 @@ interface MilestoneEstimation {
   estimatedMessages?: number
   fixedPrice?: number
   calculatedPrice: number
+  includeInQuote: boolean
 }
 
 interface GitHubIntegrationProps {
@@ -47,13 +48,15 @@ interface GitHubIntegrationProps {
   currentRepository?: string
   currentAiMessageRate?: number
   onUpdate: () => void
+  onMilestonesValidationChange?: (isValid: boolean) => void
 }
 
-export function GitHubIntegration({ 
-  quoteId, 
-  currentRepository, 
+export function GitHubIntegration({
+  quoteId,
+  currentRepository,
   currentAiMessageRate,
-  onUpdate 
+  onUpdate,
+  onMilestonesValidationChange
 }: GitHubIntegrationProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [repositories, setRepositories] = useState<GitHubRepository[]>([])
@@ -61,7 +64,8 @@ export function GitHubIntegration({
   const [milestones, setMilestones] = useState<GitHubMilestone[]>([])
   const [estimations, setEstimations] = useState<MilestoneEstimation[]>([])
   const [aiMessageRate, setAiMessageRate] = useState(currentAiMessageRate || 0.1)
-  
+  const [copToUsdRate, setCopToUsdRate] = useState(4200) // Default COP to USD rate
+
   const [loadingRepos, setLoadingRepos] = useState(false)
   const [loadingMilestones, setLoadingMilestones] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -142,16 +146,16 @@ export function GitHubIntegration({
     }
   }
 
-  const updateMilestoneEstimation = (
+  const updateMilestoneEstimation = async (
     milestoneId: number,
-    field: 'milestoneType' | 'estimatedMessages' | 'fixedPrice',
+    field: 'milestoneType' | 'estimatedMessages' | 'fixedPrice' | 'includeInQuote',
     value: any
   ) => {
+    const milestone = milestones.find(m => m.id === milestoneId)
+    if (!milestone) return
+
     setEstimations(prev => {
       const existing = prev.find(e => e.githubMilestoneId === milestoneId)
-      const milestone = milestones.find(m => m.id === milestoneId)
-      
-      if (!milestone) return prev
 
       let updatedEstimation: MilestoneEstimation
 
@@ -163,8 +167,9 @@ export function GitHubIntegration({
           milestoneTitle: milestone.title,
           milestoneType: field === 'milestoneType' ? value : 'MANUAL',
           calculatedPrice: 0,
+          includeInQuote: field === 'includeInQuote' ? value : true, // Default to true when categorized
         }
-        if (field !== 'milestoneType') {
+        if (field !== 'milestoneType' && field !== 'includeInQuote') {
           updatedEstimation[field] = value
         }
       }
@@ -181,6 +186,8 @@ export function GitHubIntegration({
       return prev.filter(e => e.githubMilestoneId !== milestoneId).concat(updatedEstimation)
     })
   }
+
+
 
   const saveConfiguration = async () => {
     setSaving(true)
@@ -207,7 +214,37 @@ export function GitHubIntegration({
     }
   }
 
-  const totalEstimatedCost = estimations.reduce((sum, est) => sum + est.calculatedPrice, 0)
+  const totalEstimatedCost = estimations
+    .filter(est => est.includeInQuote)
+    .reduce((sum, est) => sum + est.calculatedPrice, 0)
+
+  // Check if all included milestones are properly categorized and estimated
+  const validateMilestones = () => {
+    if (milestones.length === 0) return true // No milestones is valid
+
+    // Only validate milestones that are included in the quote
+    const includedEstimations = estimations.filter(est => est.includeInQuote)
+
+    return includedEstimations.every(estimation => {
+      const milestoneType = estimation.milestoneType
+
+      // Must have proper estimation
+      if (milestoneType === 'AUGMENT') {
+        return estimation.estimatedMessages && estimation.estimatedMessages > 0
+      } else if (milestoneType === 'MANUAL') {
+        return estimation.fixedPrice && estimation.fixedPrice > 0
+      }
+
+      return false
+    })
+  }
+
+  // Notify parent component when validation changes
+  useEffect(() => {
+    if (onMilestonesValidationChange) {
+      onMilestonesValidationChange(validateMilestones())
+    }
+  }, [milestones, estimations, onMilestonesValidationChange])
 
   return (
     <Card>
@@ -228,7 +265,7 @@ export function GitHubIntegration({
                 placeholder="Search repositories..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && searchRepositories()}
+                onKeyDown={(e) => e.key === 'Enter' && searchRepositories()}
               />
               <Button onClick={searchRepositories} disabled={loadingRepos}>
                 <Search className="w-4 h-4" />
@@ -298,17 +335,35 @@ export function GitHubIntegration({
 
         {/* AI Message Rate Configuration */}
         {selectedRepository && (
-          <div>
-            <Label htmlFor="aiMessageRate">AI Message Rate ($ per message)</Label>
-            <Input
-              id="aiMessageRate"
-              type="number"
-              step="0.01"
-              min="0"
-              value={aiMessageRate}
-              onChange={(e) => setAiMessageRate(parseFloat(e.target.value) || 0)}
-              className="mt-1"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="aiMessageRate">AI Message Rate ($ per message)</Label>
+              <Input
+                id="aiMessageRate"
+                type="number"
+                step="0.01"
+                min="0"
+                value={aiMessageRate}
+                onChange={(e) => setAiMessageRate(parseFloat(e.target.value) || 0)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="copToUsdRate">COP to USD Rate (COP per 1 USD)</Label>
+              <Input
+                id="copToUsdRate"
+                type="number"
+                step="1"
+                min="0"
+                value={copToUsdRate}
+                onChange={(e) => setCopToUsdRate(parseFloat(e.target.value) || 4200)}
+                className="mt-1"
+                placeholder="4200"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Current rate: 1 USD = {copToUsdRate.toLocaleString()} COP
+              </p>
+            </div>
           </div>
         )}
 
@@ -337,21 +392,56 @@ export function GitHubIntegration({
                 {milestones.map((milestone) => {
                   const estimation = estimations.find(e => e.githubMilestoneId === milestone.id)
                   const milestoneType = estimation?.milestoneType || milestone.milestoneType
+                  const isUncategorized = milestoneType === 'UNCATEGORIZED'
 
                   return (
-                    <div key={milestone.id} className="p-4 border rounded-lg space-y-3">
+                    <div key={milestone.id} className={`p-4 border rounded-lg space-y-3 ${
+                      isUncategorized ? 'border-orange-200 bg-orange-50' : 'border-gray-200'
+                    }`}>
                       <div className="flex items-start justify-between">
-                        <div>
+                        <div className="flex-1">
                           <h4 className="font-medium">{milestone.title}</h4>
                           <p className="text-sm text-gray-600">
                             {milestone.open_issues} open, {milestone.closed_issues} closed
                           </p>
+                          {isUncategorized && (
+                            <div className="flex items-center gap-2 mt-2 text-orange-700">
+                              <AlertTriangle className="w-4 h-4" />
+                              <span className="text-sm font-medium">
+                                Fix the name of the issue with the correct format
+                              </span>
+                            </div>
+                          )}
                         </div>
-                        <Badge variant={milestoneType === 'AUGMENT' ? 'default' : 'secondary'}>
-                          {milestoneType === 'AUGMENT' && <Zap className="w-3 h-3 mr-1" />}
-                          {milestoneType === 'MANUAL' && <Wrench className="w-3 h-3 mr-1" />}
-                          {milestoneType}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          {!isUncategorized && estimation && (
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={estimation.includeInQuote}
+                                onChange={(e) =>
+                                  updateMilestoneEstimation(
+                                    milestone.id,
+                                    'includeInQuote',
+                                    e.target.checked
+                                  )
+                                }
+                                className="rounded"
+                              />
+                              <span className="text-sm text-gray-600">Include in quote</span>
+                            </label>
+                          )}
+                          <Badge variant={
+                            milestoneType === 'AUGMENT' ? 'default' :
+                            milestoneType === 'MANUAL' ? 'secondary' :
+                            'destructive'
+                          }>
+                            {milestoneType === 'AUGMENT' && <Zap className="w-3 h-3 mr-1" />}
+                            {milestoneType === 'MANUAL' && <Wrench className="w-3 h-3 mr-1" />}
+                            {milestoneType === 'UNCATEGORIZED' && <AlertTriangle className="w-3 h-3 mr-1" />}
+                            {milestoneType}
+                          </Badge>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -418,11 +508,19 @@ export function GitHubIntegration({
                         {/* Calculated Price */}
                         <div>
                           <Label>Calculated Price</Label>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Calculator className="w-4 h-4 text-gray-500" />
-                            <span className="font-medium">
-                              {formatCurrency(estimation?.calculatedPrice || 0)}
-                            </span>
+                          <div className="space-y-1 mt-1">
+                            <div className="flex items-center gap-2">
+                              <Calculator className="w-4 h-4 text-gray-500" />
+                              <span className="font-medium">
+                                {formatCurrency(estimation?.calculatedPrice || 0)} USD
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <span>≈</span>
+                              <span>
+                                ${((estimation?.calculatedPrice || 0) * copToUsdRate).toLocaleString()} COP
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -437,11 +535,19 @@ export function GitHubIntegration({
         {/* Total and Save */}
         {estimations.length > 0 && (
           <div className="space-y-4 pt-4 border-t">
-            <div className="flex items-center justify-between text-lg font-medium">
-              <span>Total Estimated Cost:</span>
-              <span>{formatCurrency(totalEstimatedCost)}</span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-lg font-medium">
+                <span>Total Estimated Cost:</span>
+                <span>{formatCurrency(totalEstimatedCost)} USD</span>
+              </div>
+              <div className="flex items-center justify-between text-sm text-gray-600">
+                <span>Total in COP:</span>
+                <span className="font-medium">
+                  ${(totalEstimatedCost * copToUsdRate).toLocaleString()} COP
+                </span>
+              </div>
             </div>
-            
+
             <Button onClick={saveConfiguration} disabled={saving} className="w-full">
               {saving ? 'Saving...' : 'Save Configuration'}
             </Button>

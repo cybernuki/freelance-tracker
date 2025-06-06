@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { CreateQuoteForm } from '@/components/forms/create-quote-form'
+import { QuoteForm } from '@/components/forms/quote-form'
 import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils'
 import { FileText, Plus, Search, Filter, Eye, Edit, Trash2, FolderPlus } from 'lucide-react'
 import Link from 'next/link'

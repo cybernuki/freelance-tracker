@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { X, Plus, Calculator } from 'lucide-react'
 import { ProfitCalculator } from '@/components/quotes/profit-calculator'
+import { GitHubIntegration } from '@/components/quotes/github-integration'
 
 interface Client {
   id: string
@@ -50,6 +51,9 @@ export function QuoteForm({ quote, onSubmit, onCancel, isLoading }: QuoteFormPro
     totalCost: 0,
     profitAmount: 0
   })
+
+  // State for milestones validation
+  const [milestonesValid, setMilestonesValid] = useState(true)
 
   useEffect(() => {
     fetchClients()
@@ -98,8 +102,16 @@ export function QuoteForm({ quote, onSubmit, onCancel, isLoading }: QuoteFormPro
                            parseFloat(formData.priceEstimated.toString()) > 0 &&
                            parseFloat(formData.minimumPrice.toString()) > 0
     const hasRequirements = requirements.length > 0
-    // TODO: Add check for at least one milestone estimation when GitHub integration is used
-    return hasValidPricing && hasRequirements
+
+    // Check if there are any uncategorized or unestimated milestones
+    const hasValidMilestones = checkMilestonesValid()
+
+    return hasValidPricing && hasRequirements && hasValidMilestones
+  }
+
+  // Check if all milestones are properly categorized and estimated
+  const checkMilestonesValid = () => {
+    return milestonesValid
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -293,6 +305,17 @@ export function QuoteForm({ quote, onSubmit, onCancel, isLoading }: QuoteFormPro
         </CardContent>
       </Card>
 
+      {/* GitHub Integration */}
+      {quote?.id && (
+        <GitHubIntegration
+          quoteId={quote.id}
+          currentRepository={quote.githubRepository}
+          currentAiMessageRate={quote.aiMessageRate}
+          onUpdate={() => {}} // No need to refresh in edit mode
+          onMilestonesValidationChange={setMilestonesValid}
+        />
+      )}
+
       {/* Profit Calculator */}
       {formData.minimumPrice && (
         <ProfitCalculator
@@ -335,9 +358,9 @@ export function QuoteForm({ quote, onSubmit, onCancel, isLoading }: QuoteFormPro
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-gray-300"></div>
-                  <span className="text-gray-600">
-                    At least one estimated milestone (optional, via GitHub integration)
+                  <div className={`w-4 h-4 rounded-full ${milestonesValid ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                  <span className={milestonesValid ? 'text-green-700' : 'text-gray-600'}>
+                    All milestones properly categorized and estimated
                   </span>
                 </div>
               </div>

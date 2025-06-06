@@ -87,6 +87,7 @@ model QuoteMilestoneEstimation {
 
   // Calculated fields
   calculatedPrice      Float          @default(0) @map("calculated_price")
+  includeInQuote       Boolean        @default(true) @map("include_in_quote")
 
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
