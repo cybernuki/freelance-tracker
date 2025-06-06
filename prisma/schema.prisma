@@ -1,0 +1,228 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Client Management
+model Client {
+  id        String   @id @default(uuid())
+  reference Int      @default(autoincrement())
+  name      String
+  contact   String?
+  email     String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  quotes Quote[]
+
+  @@map("clients")
+}
+
+// Quotation Workflow
+model Quote {
+  id                  String      @id @default(uuid())
+  reference           Int         @default(autoincrement())
+  name                String
+  description         String?
+  startDateEstimated  DateTime?   @map("start_date_estimated")
+  endDateEstimated    DateTime?   @map("end_date_estimated")
+  source              String?     // Lead source (Fiverr, LinkedIn, etc.)
+  sourceLink          String?     @map("source_link")
+  priceEstimated      Float       @map("price_estimated")
+  minimumPrice        Float       @map("minimum_price")
+  requirements        String[]    // Array of requirements
+  status              QuoteStatus @default(QUOTED)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  // Relations
+  clientId String @map("client_id")
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project  Project?
+
+  @@map("quotes")
+}
+
+enum QuoteStatus {
+  QUOTED
+  ACCEPTED
+  REJECTED
+}
+
+// Project Workflow
+model Project {
+  id              String        @id @default(uuid())
+  reference       Int           @default(autoincrement())
+  name            String
+  description     String?
+  startDate       DateTime      @map("start_date")
+  endDate         DateTime?     @map("end_date")
+  agreedPrice     Float         @map("agreed_price")
+  minimumCost     Float         @map("minimum_cost")
+  aiMessageRate   Float         @map("ai_message_rate") // Per message cost
+  status          ProjectStatus @default(ACTIVE)
+  
+  // Profitability (calculated and persisted when completed)
+  totalIncome     Float?        @map("total_income")
+  totalCosts      Float?        @map("total_costs")
+  netProfit       Float?        @map("net_profit")
+  profitMargin    Float?        @map("profit_margin") // Percentage
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  quoteId      String     @unique @map("quote_id")
+  quote        Quote      @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  issues       Issue[]
+  milestones   Milestone[]
+  manualTasks  ManualTask[]
+  extraExpenses ExtraExpense[]
+  payments     Payment[]
+  alerts       Alert[]
+
+  @@map("projects")
+}
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  CANCELED
+}
+
+// GitHub Integration - Milestones
+model Milestone {
+  id        String        @id @default(uuid())
+  title     String
+  type      MilestoneType @default(MANUAL)
+  isExtra   Boolean       @default(false) @map("is_extra") // Created after baseline
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  // Relations
+  projectId String  @map("project_id")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues    Issue[]
+
+  @@map("milestones")
+}
+
+enum MilestoneType {
+  MANUAL
+  AUGMENT
+}
+
+// GitHub Integration - Issues
+model Issue {
+  id                 String     @id @default(uuid())
+  number             Int        // GitHub issue number
+  title              String
+  type               IssueType  @default(MANUAL)
+  status             IssueStatus @default(OPEN)
+  aiMessageEstimate  Int        @default(0) @map("ai_message_estimate")
+  aiMessageReal      Int        @default(0) @map("ai_message_real")
+  costEstimated      Float      @default(0) @map("cost_estimated")
+  costReal           Float      @default(0) @map("cost_real")
+  pullRequest        String?    @map("pull_request") // PR URL or number
+  isExtra            Boolean    @default(false) @map("is_extra") // Created after baseline
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  // Relations
+  projectId   String      @map("project_id")
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestoneId String?     @map("milestone_id")
+  milestone   Milestone?  @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  aiMessages  AiMessage[]
+
+  @@map("issues")
+}
+
+enum IssueType {
+  MANUAL
+  AUGMENT
+}
+
+enum IssueStatus {
+  OPEN
+  CLOSED
+}
+
+// AI Message Tracking
+model AiMessage {
+  id     String   @id @default(uuid())
+  amount Int      // Number of messages
+  cost   Float    // Total cost for these messages
+  date   DateTime @default(now())
+
+  // Relations
+  issueId String @map("issue_id")
+  issue   Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@map("ai_messages")
+}
+
+// Manual Work & Expenses
+model ManualTask {
+  id          String   @id @default(uuid())
+  description String
+  cost        Float
+  createdAt   DateTime @default(now())
+
+  // Relations
+  projectId String  @map("project_id")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("manual_tasks")
+}
+
+model ExtraExpense {
+  id          String   @id @default(uuid())
+  description String
+  amount      Float
+  date        DateTime @default(now())
+
+  // Relations
+  projectId String  @map("project_id")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("extra_expenses")
+}
+
+// Payments
+model Payment {
+  id      String   @id @default(uuid())
+  amount  Float
+  date    DateTime @default(now())
+  method  String   // PayPal, Nequi, Fiverr, etc.
+  comment String?
+
+  // Relations
+  projectId String  @map("project_id")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+// Alerts & Reminders
+model Alert {
+  id      String   @id @default(uuid())
+  message String
+  date    DateTime @default(now())
+  read    Boolean  @default(false)
+
+  // Relations
+  projectId String  @map("project_id")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("alerts")
+}

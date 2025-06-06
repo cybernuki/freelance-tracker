@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: freelance-tracker-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: freelance_tracker
+      POSTGRES_USER: freelancer
+      POSTGRES_PASSWORD: secure_password_123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - freelance-network
+
+  # Next.js Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: freelance-tracker-app
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://freelancer:secure_password_123@postgres:5432/freelance_tracker
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    networks:
+      - freelance-network
+
+  # Prisma Studio (optional, for database management)
+  prisma-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: freelance-tracker-studio
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://freelancer:secure_password_123@postgres:5432/freelance_tracker
+    ports:
+      - "5555:5555"
+    depends_on:
+      - postgres
+    networks:
+      - freelance-network
+    command: ["npx", "prisma", "studio", "--hostname", "0.0.0.0"]
+
+volumes:
+  postgres_data:
+
+networks:
+  freelance-network:
+    driver: bridge
