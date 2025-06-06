@@ -176,11 +176,12 @@ enum ProjectStatus {
 
 // GitHub Integration - Milestones (activity types moved to issues)
 model Milestone {
-  id        String   @id @default(uuid())
-  title     String
-  isExtra   Boolean  @default(false) @map("is_extra") // Created after baseline
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id @default(uuid())
+  title             String
+  githubMilestoneId BigInt?  @map("github_milestone_id") // GitHub milestone ID
+  isExtra           Boolean  @default(false) @map("is_extra") // Created after baseline
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   // Relations
   projectId String  @map("project_id")
@@ -197,6 +198,7 @@ model Issue {
   id                 String     @id @default(uuid())
   number             Int        // GitHub issue number
   title              String
+  githubIssueId      BigInt?    @map("github_issue_id") // GitHub issue ID
   type               IssueType  @default(MANUAL)
   status             IssueStatus @default(OPEN)
   aiMessageEstimate  Int        @default(0) @map("ai_message_estimate")

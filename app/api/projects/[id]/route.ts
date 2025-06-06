@@ -3,6 +3,31 @@ import { prisma } from '@/lib/prisma'
 import { calculateProjectProfitability } from '@/lib/profitability'
 import { z } from 'zod'
 
+// Helper function to convert BigInt fields to strings recursively
+function convertBigIntToString(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj
+  }
+
+  if (typeof obj === 'bigint') {
+    return obj.toString()
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(convertBigIntToString)
+  }
+
+  if (typeof obj === 'object') {
+    const converted: any = {}
+    for (const [key, value] of Object.entries(obj)) {
+      converted[key] = convertBigIntToString(value)
+    }
+    return converted
+  }
+
+  return obj
+}
+
 const updateProjectSchema = z.object({
   name: z.string().min(1, 'Project name is required').optional(),
   description: z.string().optional(),
@@ -40,6 +65,13 @@ export async function GET(
           orderBy: { createdAt: 'desc' },
         },
         milestones: {
+          include: {
+            issues: {
+              include: {
+                aiMessages: true,
+              },
+            },
+          },
           orderBy: { createdAt: 'asc' },
         },
         manualTasks: {
@@ -84,7 +116,8 @@ export async function GET(
       }
     }
 
-    return NextResponse.json(projectWithMetrics)
+    // Convert BigInt fields to strings for JSON serialization
+    return NextResponse.json(convertBigIntToString(projectWithMetrics))
   } catch (error) {
     console.error('Error fetching project:', error)
     return NextResponse.json(
@@ -153,6 +186,12 @@ export async function PATCH(
         issues: {
           include: {
             aiMessages: true,
+            milestone: true,
+          },
+        },
+        milestones: {
+          include: {
+            issues: true,
           },
         },
         manualTasks: true,
@@ -160,7 +199,8 @@ export async function PATCH(
       },
     })
 
-    return NextResponse.json(project)
+    // Convert BigInt fields to strings for JSON serialization
+    return NextResponse.json(convertBigIntToString(project))
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

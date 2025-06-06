@@ -8,7 +8,9 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { ArrowLeft, Edit, DollarSign, Calendar, TrendingUp, AlertCircle, User, FileText, Activity, MessageSquare } from 'lucide-react'
+import { ArrowLeft, Edit, DollarSign, Calendar, TrendingUp, AlertCircle, User, FileText, Activity, MessageSquare, Github } from 'lucide-react'
+import { GitHubIntegration } from '@/components/quotes/github-integration'
+import { AIMessageTracker } from '@/components/projects/ai-message-tracker'
 import Link from 'next/link'
 
 interface Project {
@@ -19,9 +21,11 @@ interface Project {
   startDate: string
   endDate?: string
   agreedPrice: number
+  aiMessageRate: number
   status: 'ACTIVE' | 'COMPLETED' | 'CANCELED'
   quote: {
     id: string
+    githubRepository?: string
     client: {
       id: string
       name: string
@@ -94,13 +98,53 @@ export default function ProjectDetailPage() {
         }
         throw new Error('Failed to fetch project')
       }
-      
+
       const data = await response.json()
       setProject(data)
     } catch (error) {
       console.error('Error fetching project:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleSyncGitHub = async () => {
+    try {
+      const response = await fetch(`/api/projects/${params.id}/github`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'syncGitHub' }),
+      })
+
+      if (response.ok) {
+        await fetchProject() // Refresh project data
+      } else {
+        console.error('Failed to sync with GitHub')
+      }
+    } catch (error) {
+      console.error('Error syncing with GitHub:', error)
+    }
+  }
+
+  const handleAiMessageUpdate = async (issueId: string, actualMessages: number) => {
+    try {
+      const response = await fetch(`/api/projects/${params.id}/ai-messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'updateActualMessages',
+          issueId,
+          actualMessages,
+        }),
+      })
+
+      if (response.ok) {
+        await fetchProject() // Refresh project data
+      } else {
+        console.error('Failed to update AI messages')
+      }
+    } catch (error) {
+      console.error('Error updating AI messages:', error)
     }
   }
 
@@ -326,6 +370,32 @@ export default function ProjectDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* GitHub Integration */}
+          {project.quote.githubRepository && (
+            <GitHubIntegration
+              mode="project"
+              projectId={project.id}
+              currentRepository={project.quote.githubRepository}
+              currentAiMessageRate={project.aiMessageRate}
+              onUpdate={fetchProject}
+              onSyncGitHub={handleSyncGitHub}
+              onAiMessageUpdate={handleAiMessageUpdate}
+              showRepositorySearch={false}
+              showPricing={false}
+              showAiMessageTracking={true}
+              showEstimatedVsActual={true}
+              readonly={false}
+            />
+          )}
+
+          {/* AI Message Tracking */}
+          <AIMessageTracker
+            projectId={project.id}
+            projectName={project.name}
+            aiMessageRate={project.aiMessageRate}
+            onUpdate={fetchProject}
+          />
         </div>
 
         {/* Sidebar */}

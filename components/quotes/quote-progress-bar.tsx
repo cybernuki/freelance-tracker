@@ -18,9 +18,10 @@ interface QuoteProgressItem {
 interface QuoteProgressBarProps {
   status: 'DRAFT' | 'QUOTED' | 'ACCEPTED' | 'REJECTED'
   progressItems: QuoteProgressItem[]
+  onTransitionToQuoted?: () => void
 }
 
-export function QuoteProgressBar({ status, progressItems }: QuoteProgressBarProps) {
+export function QuoteProgressBar({ status, progressItems, onTransitionToQuoted }: QuoteProgressBarProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
   if (status !== 'DRAFT') {
@@ -147,16 +148,27 @@ export function QuoteProgressBar({ status, progressItems }: QuoteProgressBarProp
 
           {canTransitionToQuoted && (
             <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-                <div>
-                  <p className="text-sm font-medium text-green-900">
-                    Ready to Quote!
-                  </p>
-                  <p className="text-xs text-green-700">
-                    All required information has been completed. You can now transition this quote to QUOTED status.
-                  </p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <div>
+                    <p className="text-sm font-medium text-green-900">
+                      Ready to Quote!
+                    </p>
+                    <p className="text-xs text-green-700">
+                      All required information has been completed. You can now transition this quote to QUOTED status.
+                    </p>
+                  </div>
                 </div>
+                {onTransitionToQuoted && (
+                  <Button
+                    onClick={onTransitionToQuoted}
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    Mark as QUOTED
+                  </Button>
+                )}
               </div>
             </div>
           )}

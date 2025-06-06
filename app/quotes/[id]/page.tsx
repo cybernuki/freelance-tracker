@@ -205,6 +205,23 @@ export default function QuoteDetailPage() {
     }
   }
 
+  const handleTransitionToQuoted = async () => {
+    try {
+      const response = await fetch(`/api/quotes/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'QUOTED' }),
+      })
+
+      if (!response.ok) throw new Error('Failed to transition quote to QUOTED status')
+
+      fetchQuote() // Refresh the quote
+    } catch (error) {
+      console.error('Error transitioning quote to QUOTED:', error)
+      alert('Failed to transition quote to QUOTED status. Please try again.')
+    }
+  }
+
   const handleSavePricing = async () => {
     try {
       // Note: When manually editing minimum price, we assume it already includes AI messages cost
@@ -445,6 +462,7 @@ export default function QuoteDetailPage() {
         <QuoteProgressBar
           status={quote.status}
           progressItems={calculateQuoteProgress(quote)}
+          onTransitionToQuoted={handleTransitionToQuoted}
         />
       )}
 

@@ -2,6 +2,31 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
+// Helper function to convert BigInt fields to strings recursively
+function convertBigIntToString(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj
+  }
+
+  if (typeof obj === 'bigint') {
+    return obj.toString()
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(convertBigIntToString)
+  }
+
+  if (typeof obj === 'object') {
+    const converted: any = {}
+    for (const [key, value] of Object.entries(obj)) {
+      converted[key] = convertBigIntToString(value)
+    }
+    return converted
+  }
+
+  return obj
+}
+
 const createProjectSchema = z.object({
   quoteId: z.string().uuid('Valid quote ID is required'),
   name: z.string().min(1, 'Project name is required').optional(),
@@ -51,9 +76,15 @@ export async function GET(request: NextRequest) {
             },
           },
           payments: true,
+          milestones: {
+            include: {
+              issues: true,
+            },
+          },
           issues: {
             include: {
               aiMessages: true,
+              milestone: true,
             },
           },
           manualTasks: true,
@@ -85,7 +116,7 @@ export async function GET(request: NextRequest) {
       const totalCosts = totalAiCost + totalManualCost + totalExtraExpenses
       const paymentProgress = project.agreedPrice > 0 ? (totalPaid / project.agreedPrice) * 100 : 0
 
-      return {
+      const projectWithMetrics = {
         ...project,
         metrics: {
           totalPaid,
@@ -96,12 +127,15 @@ export async function GET(request: NextRequest) {
           totalCosts,
           paymentProgress,
           netProfit: totalPaid - totalCosts,
-          unreadAlerts: project.alerts.length,
+          unreadAlerts: project.alerts?.length || 0,
         }
       }
+
+      // Convert BigInt fields to strings for JSON serialization
+      return convertBigIntToString(projectWithMetrics)
     })
 
-    return NextResponse.json({
+    const responseData = {
       projects: projectsWithMetrics,
       pagination: {
         page,
@@ -109,7 +143,9 @@ export async function GET(request: NextRequest) {
         total,
         pages: Math.ceil(total / limit),
       },
-    })
+    }
+
+    return NextResponse.json(convertBigIntToString(responseData))
   } catch (error) {
     console.error('Error fetching projects:', error)
     return NextResponse.json(
@@ -127,7 +163,14 @@ export async function POST(request: NextRequest) {
     // Verify quote exists and is accepted
     const quote = await prisma.quote.findUnique({
       where: { id: validatedData.quoteId },
-      include: { client: true },
+      include: {
+        client: true,
+        milestoneEstimations: {
+          include: {
+            issueEstimations: true,
+          },
+        },
+      },
     })
 
     if (!quote) {
@@ -156,24 +199,82 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const project = await prisma.project.create({
-      data: {
-        quoteId: validatedData.quoteId,
-        name: validatedData.name || quote.name,
-        description: validatedData.description || quote.description,
-        startDate: new Date(validatedData.startDate),
-        endDate: validatedData.endDate ? new Date(validatedData.endDate) : quote.endDateEstimated,
-        agreedPrice: validatedData.agreedPrice || quote.priceEstimated,
-        minimumCost: validatedData.minimumCost || quote.minimumPrice,
-        aiMessageRate: validatedData.aiMessageRate,
-      },
-      include: {
-        quote: {
-          include: {
-            client: true,
-          },
+    // Create project and transfer milestone/issue data in a transaction
+    const project = await prisma.$transaction(async (tx) => {
+      // Create the project
+      const newProject = await tx.project.create({
+        data: {
+          quoteId: validatedData.quoteId,
+          name: validatedData.name || quote.name,
+          description: validatedData.description || quote.description,
+          startDate: new Date(validatedData.startDate),
+          endDate: validatedData.endDate ? new Date(validatedData.endDate) : quote.endDateEstimated,
+          agreedPrice: validatedData.agreedPrice || quote.priceEstimated,
+          minimumCost: validatedData.minimumCost || quote.minimumPrice,
+          aiMessageRate: validatedData.aiMessageRate,
         },
-      },
+      })
+
+      // Transfer milestones and issues from quote estimations
+      if (quote.milestoneEstimations && quote.milestoneEstimations.length > 0) {
+        for (const milestoneEst of quote.milestoneEstimations) {
+          // Only transfer milestones that were included in the quote
+          if (milestoneEst.includeInQuote) {
+            // Create milestone
+            const milestone = await tx.milestone.create({
+              data: {
+                projectId: newProject.id,
+                title: milestoneEst.milestoneTitle,
+                githubMilestoneId: milestoneEst.githubMilestoneId,
+                isExtra: false, // These are baseline milestones from the quote
+              },
+            })
+
+            // Transfer issues for this milestone
+            if (milestoneEst.issueEstimations && milestoneEst.issueEstimations.length > 0) {
+              for (const issueEst of milestoneEst.issueEstimations) {
+                await tx.issue.create({
+                  data: {
+                    projectId: newProject.id,
+                    milestoneId: milestone.id,
+                    number: issueEst.issueNumber,
+                    title: issueEst.issueTitle,
+                    githubIssueId: issueEst.githubIssueId,
+                    type: issueEst.issueType,
+                    status: 'OPEN', // Default status
+                    aiMessageEstimate: issueEst.estimatedMessages || 0,
+                    aiMessageReal: 0, // Will be updated as work progresses
+                    costEstimated: issueEst.calculatedPrice,
+                    costReal: 0, // Will be updated as work progresses
+                    isExtra: false, // These are baseline issues from the quote
+                  },
+                })
+              }
+            }
+          }
+        }
+      }
+
+      // Return the project with all related data
+      const projectWithData = await tx.project.findUnique({
+        where: { id: newProject.id },
+        include: {
+          quote: {
+            include: {
+              client: true,
+            },
+          },
+          milestones: {
+            include: {
+              issues: true,
+            },
+          },
+          issues: true,
+        },
+      })
+
+      // Convert BigInt fields to strings for JSON serialization
+      return convertBigIntToString(projectWithData)
     })
 
     return NextResponse.json(project, { status: 201 })

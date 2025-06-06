@@ -68,23 +68,59 @@ interface MilestoneEstimation {
 }
 
 interface GitHubIntegrationProps {
-  quoteId: string
+  // Common props
   currentRepository?: string
   currentAiMessageRate?: number
-  existingMilestones?: any[]
   onUpdate: () => void
+
+  // Quote-specific props
+  quoteId?: string
+  existingMilestones?: any[]
   onMilestonesValidationChange?: (isValid: boolean) => void
   onUpdateEstimatedPrice?: (price: number, milestonesData?: any) => void
+
+  // Project-specific props
+  projectId?: string
+  mode?: 'quote' | 'project'
+  projectMilestones?: any[]
+  projectIssues?: any[]
+  onAiMessageUpdate?: (issueId: string, actualMessages: number) => void
+  onSyncGitHub?: () => void
+
+  // UI customization
+  showRepositorySearch?: boolean
+  showPricing?: boolean
+  showAiMessageTracking?: boolean
+  showEstimatedVsActual?: boolean
+  readonly?: boolean
 }
 
 export function GitHubIntegration({
-  quoteId,
+  // Common props
   currentRepository,
   currentAiMessageRate,
-  existingMilestones,
   onUpdate,
+
+  // Quote-specific props
+  quoteId,
+  existingMilestones,
   onMilestonesValidationChange,
-  onUpdateEstimatedPrice
+  onUpdateEstimatedPrice,
+
+  // Project-specific props
+  projectId,
+  mode = 'quote',
+  projectMilestones,
+  projectIssues,
+  onAiMessageUpdate,
+  onSyncGitHub,
+
+  // UI customization
+  showRepositorySearch = true,
+  showPricing = true,
+  showAiMessageTracking = false,
+  showEstimatedVsActual = false,
+  readonly = false
 }: GitHubIntegrationProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [repositories, setRepositories] = useState<GitHubRepository[]>([])
@@ -101,10 +137,20 @@ export function GitHubIntegration({
   const [saving, setSaving] = useState(false)
   const [isLoadingExistingData, setIsLoadingExistingData] = useState(false)
 
+  // Project-specific states
+  const [githubIssueStatuses, setGithubIssueStatuses] = useState<{[key: number]: any}>({})
+  const [pullRequestStatuses, setPullRequestStatuses] = useState<{[key: number]: any}>({})
+  const [actualAiMessages, setActualAiMessages] = useState<{[key: string]: number}>({})
+  const [syncingGitHub, setSyncingGitHub] = useState(false)
+
   // Fetch existing estimations on component mount
   useEffect(() => {
-    fetchExistingEstimations()
-  }, [quoteId])
+    if (mode === 'quote' && quoteId) {
+      fetchExistingEstimations()
+    } else if (mode === 'project' && projectId) {
+      fetchProjectData()
+    }
+  }, [quoteId, projectId, mode])
 
   // Fetch milestones when repository changes, but only if we don't have existing milestone data
   // and we've already processed existing milestones
@@ -168,6 +214,8 @@ export function GitHubIntegration({
   }, [existingMilestones])
 
   const fetchExistingEstimations = async () => {
+    if (!quoteId) return
+
     try {
       const response = await fetch(`/api/quotes/${quoteId}/milestones`)
       if (response.ok) {
@@ -179,6 +227,42 @@ export function GitHubIntegration({
       }
     } catch (error) {
       console.error('Error fetching existing estimations:', error)
+    }
+  }
+
+  const fetchProjectData = async () => {
+    if (!projectId) return
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/github`)
+      if (response.ok) {
+        const data = await response.json()
+        setSelectedRepository(data.githubRepository || '')
+        setAiMessageRate(data.aiMessageRate || 0.08)
+
+        // Convert project milestones and issues to estimations format
+        if (data.milestones && data.milestones.length > 0) {
+          const convertedEstimations = data.milestones.map((milestone: any) => ({
+            githubMilestoneId: milestone.githubMilestoneId,
+            milestoneTitle: milestone.title,
+            issues: milestone.issues?.map((issue: any) => ({
+              githubIssueId: issue.githubIssueId,
+              issueNumber: issue.number,
+              issueTitle: issue.title,
+              issueType: issue.type,
+              estimatedMessages: issue.aiMessageEstimate,
+              actualMessages: issue.aiMessageReal,
+              fixedPrice: issue.costEstimated,
+              calculatedPrice: issue.costEstimated,
+            })) || [],
+            calculatedPrice: milestone.issues?.reduce((sum: number, issue: any) => sum + issue.costEstimated, 0) || 0,
+            includeInQuote: true,
+          }))
+          setEstimations(convertedEstimations)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching project data:', error)
     }
   }
 
@@ -507,78 +591,107 @@ export function GitHubIntegration({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* AI Message Rate and COP Rate Configuration - Moved to the top */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label>AI Message Rate ($ per message)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              value={aiMessageRate}
-              onChange={(e) => setAiMessageRate(parseFloat(e.target.value) || 0)}
-            />
-          </div>
-          <div>
-            <Label>COP to USD Rate</Label>
-            <Input
-              type="number"
-              min="0"
-              value={copToUsdRate}
-              onChange={(e) => setCopToUsdRate(parseFloat(e.target.value) || 0)}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              AI Rate in COP: {formatCurrency(aiMessageRate * copToUsdRate, 'COP')}
-            </p>
-          </div>
-        </div>
-
-        {/* Repository Search */}
-        <div className="space-y-4">
-          <div>
-            <Label>Search GitHub Repository</Label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Search repositories..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && searchRepositories()}
-              />
-              <Button
-                onClick={searchRepositories}
-                disabled={loadingRepositories || !searchQuery.trim()}
-              >
-                {loadingRepositories ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
-              </Button>
-            </div>
-          </div>
-
-          {repositories.length > 0 && (
+        {/* AI Message Rate and COP Rate Configuration - Only show in quote mode or if showPricing is true */}
+        {(mode === 'quote' || showPricing) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label>Select Repository</Label>
-              <Select value={selectedRepository} onValueChange={setSelectedRepository}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a repository" />
-                </SelectTrigger>
-                <SelectContent>
-                  {repositories.map((repo) => (
-                    <SelectItem key={repo.id} value={repo.full_name}>
-                      <div className="flex items-center gap-2">
-                        <img
-                          src={repo.owner.avatar_url}
-                          alt={repo.owner.login}
-                          className="w-4 h-4 rounded-full"
-                        />
-                        <span>{repo.full_name}</span>
-                        {repo.private && <Badge variant="secondary" className="text-xs">Private</Badge>}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>AI Message Rate ($ per message)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={aiMessageRate}
+                onChange={(e) => setAiMessageRate(parseFloat(e.target.value) || 0)}
+                disabled={readonly}
+              />
             </div>
-          )}
-        </div>
+            <div>
+              <Label>COP to USD Rate</Label>
+              <Input
+                type="number"
+                min="0"
+                value={copToUsdRate}
+                onChange={(e) => setCopToUsdRate(parseFloat(e.target.value) || 0)}
+                disabled={readonly}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                AI Rate in COP: {formatCurrency(aiMessageRate * copToUsdRate, 'COP')}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Repository Search - Only show if showRepositorySearch is true */}
+        {showRepositorySearch && (
+          <div className="space-y-4">
+            <div>
+              <Label>Search GitHub Repository</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Search repositories..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && searchRepositories()}
+                  disabled={readonly}
+                />
+                <Button
+                  onClick={searchRepositories}
+                  disabled={loadingRepositories || !searchQuery.trim() || readonly}
+                >
+                  {loadingRepositories ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
+                </Button>
+              </div>
+            </div>
+
+            {repositories.length > 0 && (
+              <div>
+                <Label>Select Repository</Label>
+                <Select value={selectedRepository} onValueChange={setSelectedRepository} disabled={readonly}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a repository" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {repositories.map((repo) => (
+                      <SelectItem key={repo.id} value={repo.full_name}>
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={repo.owner.avatar_url}
+                            alt={repo.owner.login}
+                            className="w-4 h-4 rounded-full"
+                          />
+                          <span>{repo.full_name}</span>
+                          {repo.private && <Badge variant="secondary" className="text-xs">Private</Badge>}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Repository Display - Show current repository when search is disabled */}
+        {!showRepositorySearch && selectedRepository && (
+          <div className="space-y-2">
+            <Label>Connected Repository</Label>
+            <div className="flex items-center gap-2 p-3 border rounded-lg bg-gray-50">
+              <Github className="w-4 h-4" />
+              <span className="font-medium">{selectedRepository}</span>
+              {onSyncGitHub && (
+                <Button
+                  onClick={onSyncGitHub}
+                  variant="outline"
+                  size="sm"
+                  disabled={syncingGitHub}
+                  className="ml-auto"
+                >
+                  {syncingGitHub ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Sync'}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
 
 
